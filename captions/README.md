@@ -1,0 +1,97 @@
+# Animated word-highlight captions
+
+Burns kinetic, word-by-word captions onto a video. The original frame and audio stay unchanged, and the captions are layered on top.
+
+| Setting | Value |
+|---|---|
+| Font | **Inter Bold** (bundled in `fonts/`, SIL OFL) |
+| Size | **36px**, measured like CSS/Figma (the em box is 36px). libass sizes fonts differently, so the script converts automatically. |
+| Colour | White text with a subtle soft drop shadow and a thin dark edge for contrast on busy backgrounds |
+| Highlight | The word being spoken turns **#FACC15** (bright yellow). Use `--accent "#6366F1"` for indigo. |
+| Motion | Each phrase slides up 14px and fades in over 160ms. Upcoming words are slightly dimmed, and the phrase fades out at the end. |
+| Position | Lower third: the baseline sits at 86% of the picture height, which is y ≈ 1650 on a 1080×1920 frame |
+| Timing | Whisper word-level timestamps (faster-whisper with VAD) |
+
+### Pillarboxed footage is handled automatically
+`Timeline_1_1_1.mp4` is a **vertical 9:16 recording inside a 1920×1080 frame**, with black bars left and right. The script runs `ffmpeg cropdetect` and finds the real picture at `608×1080 @ x=656`. It then:
+- centres the captions on the picture (x = 960),
+- keeps every line within 86% of the picture width (≈523px), so text never spills onto the black bars,
+- places the lower third at y ≈ 929, which is the same relative spot as y 1650 on a 1080×1920 reel.
+
+Use `--no-autocrop` to ignore the bars and lay out over the full frame.
+
+## Setup (once)
+
+```bash
+# macOS: brew install ffmpeg      Windows: winget install ffmpeg      Ubuntu: sudo apt install ffmpeg
+cd captions
+python3 -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+The first run downloads the Whisper model (~460 MB for `small`).
+
+## Run it
+
+```bash
+./render.sh /path/to/Timeline_1_1_1.mp4
+```
+
+This writes three files next to the input video:
+- `Timeline_1_1_1_words.json`: the Whisper transcript with word timings
+- `Timeline_1_1_1_captions.ass`: the animated captions (editable)
+- `Timeline_1_1_1_captioned.mp4`: **the final video**
+
+Useful variations:
+
+```bash
+./render.sh video.mp4 --accent "#6366F1"            # indigo highlight
+./render.sh video.mp4 --uppercase --max-words 3     # punchier, reel-style
+MODEL=medium PROMPT="Bioscriptz, biotech, founders" ./render.sh video.mp4   # better accuracy + spelling hints
+SKIP_TRANSCRIBE=1 ./render.sh video.mp4             # re-style without re-transcribing
+```
+
+On Windows, run the three commands from `render.sh` by hand (see "Step by step" below), or use Git Bash.
+
+## Step by step (same thing, manually)
+
+```bash
+# 1. Transcribe with word timestamps
+python3 transcribe.py video.mp4 -o words.json --model small
+
+# 2. (optional) fix any misheard words in words.json. Only edit the "word" text, not the times.
+
+# 3. Build the animated caption file
+python3 build_captions.py words.json --video video.mp4 -o captions.ass
+
+# 4a. PREVIEW instantly, no render needed
+ffplay -vf "ass=captions.ass:fontsdir=fonts" video.mp4
+
+# 4b. Render the final video (high quality, audio copied untouched)
+ffmpeg -i video.mp4 -vf "ass=captions.ass:fontsdir=fonts" \
+  -map 0:v:0 -map 0:a? -c:v libx264 -preset slow -crf 16 -pix_fmt yuv420p \
+  -c:a copy -movflags +faststart video_captioned.mp4
+```
+
+### Bit-exact alternative (no re-encode)
+Burning captions in always re-encodes the video. CRF 16 is visually lossless, but if you want the original pixels untouched, attach the captions as a styled subtitle track instead. VLC, mpv and IINA render the animation; Instagram and YouTube uploads will *not* show it.
+
+```bash
+ffmpeg -i video.mp4 -i captions.ass -map 0 -map 1 -c copy \
+  -attach fonts/Inter-Bold.ttf -metadata:s:t mimetype=font/ttf video_softsubs.mkv
+```
+
+## Tweaking
+All options: `python3 build_captions.py --help`. The main ones:
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--font-size` | 36 | text size in px |
+| `--accent` | `#FACC15` | highlight colour |
+| `--y-frac` | 0.86 | vertical position (fraction of picture height) |
+| `--max-words` | 4 | words on screen at once |
+| `--shadow` / `--outline` / `--blur` | 3 / 1.5 / 0.8 | shadow offset, edge thickness, softness |
+| `--dim` | 0.15 | transparency of words not yet spoken (0 = off) |
+| `--uppercase` | off | ALL CAPS |
+
+To fine-tune individual lines or timings by hand, open the `.ass` file in [Aegisub](https://aegisub.org) (free).
