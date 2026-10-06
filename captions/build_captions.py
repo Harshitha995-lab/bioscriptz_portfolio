@@ -147,6 +147,24 @@ def wrap(group, max_width, metrics, px):
     return best
 
 
+# ---------- SRT output (plain phrase-level subtitles, e.g. for an editor's subtitle track) ----------
+
+def write_srt(groups, path, linger):
+    def t(sec):
+        ms = int(round(sec * 1000))
+        h, ms = divmod(ms, 3600000)
+        m, ms = divmod(ms, 60000)
+        s, ms = divmod(ms, 1000)
+        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+    with open(path, "w", encoding="utf-8") as f:
+        for i, g in enumerate(groups):
+            end = g[-1]["end"] + linger
+            if i + 1 < len(groups):
+                end = min(end, groups[i + 1][0]["start"])
+            f.write(f"{i + 1}\n{t(g[0]['start'])} --> {t(end)}\n{' '.join(w['text'] for w in g)}\n\n")
+
+
 # ---------- ASS output ----------
 
 def build(args):
@@ -236,6 +254,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(header + "\n".join(lines) + "\n")
     print(f"{len(words)} words -> {len(groups)} caption groups -> {args.output}")
+    if args.srt:
+        write_srt(groups, args.srt, args.linger)
+        print(f"Plain subtitles -> {args.srt}")
     print(f"Frame {W}x{H}, captions centred at x={round(cx)}, baseline y={round(baseline_y)}, "
           f"max line width {round(max_width)}px, font {metrics.family} {font_px}px (ASS size {ass_size})")
 
@@ -244,6 +265,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("words", help="Whisper JSON with word timestamps")
     p.add_argument("-o", "--output", default="captions.ass")
+    p.add_argument("--srt", help="also write plain phrase-level .srt subtitles to this path")
     p.add_argument("--video", help="source video (used for resolution + black-bar detection)")
     p.add_argument("--width", type=int, default=1080, help="frame width if --video not given")
     p.add_argument("--height", type=int, default=1920, help="frame height if --video not given")

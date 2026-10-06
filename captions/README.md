@@ -53,6 +53,31 @@ SKIP_TRANSCRIBE=1 ./render.sh video.mp4             # re-style without re-transc
 
 On Windows, run the three commands from `render.sh` by hand (see "Step by step" below), or use Git Bash.
 
+## Editing in DaVinci Resolve
+
+Resolve can't play `.ass` animations. Instead, render the captions as a **transparent overlay clip** and stack it above your footage. The video stays untouched on V1, and you keep full control in the edit.
+
+```bash
+./overlay.sh /path/to/Timeline_1_1_1.mp4
+```
+
+This creates:
+- `Timeline_1_1_1_captions_overlay.mov`: ProRes 4444 with alpha, same size, fps and length as your video
+- `Timeline_1_1_1_captions.srt`: plain subtitles (optional)
+
+In Resolve (the free version works):
+1. **Project settings → Master Settings:** timeline resolution **1920×1080**, frame rate **24**. Set these *before* adding clips.
+2. **Media page:** import `Timeline_1_1_1.mp4` and `Timeline_1_1_1_captions_overlay.mov`.
+3. **Edit page:** put the video on **V1** and the overlay on **V2**, both starting at 00:00:00:00. They're the same length, so they line up frame-for-frame.
+4. The overlay's transparency should work automatically. If you see a black frame instead, right-click the overlay in the Media Pool → **Clip Attributes → Alpha mode: Straight**.
+5. Edit as normal. If you trim or cut V1, select both clips and link them (**Ctrl/Cmd + Alt + L**) so the captions stay in sync.
+6. **Deliver page:** export as H.264/H.265 MP4 at 1920×1080.
+
+Tips:
+- **Moving or resizing captions:** select the V2 clip → Inspector → Transform (Position Y / Zoom). Because the captions are one layer, this moves all of them together.
+- **Changing words, colours or timing:** fix `Timeline_1_1_1_words.json` or pass flags (`--accent`, `--max-words`…), then rerun with `SKIP_TRANSCRIBE=1 ./overlay.sh …` and in Resolve right-click the clip → **Replace Clip**.
+- **Editable text inside Resolve:** File → Import → **Subtitle** → choose the `.srt`. This gives plain, phrase-level subtitles you can retype and style in the Inspector, but without the word-by-word highlight.
+
 ## Step by step (same thing, manually)
 
 ```bash
