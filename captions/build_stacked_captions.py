@@ -137,8 +137,11 @@ def build(args):
 
     top_m = FontMetrics(os.path.join(FONTS, "Poppins-Medium.ttf"))
     big_m = FontMetrics(os.path.join(FONTS, "Poppins-ExtraBold.ttf"))
+    emph_file = os.path.join(FONTS, args.emph_font) if args.emph_font else None
+    emph_m = FontMetrics(emph_file) if emph_file else None
     m_desc = {}
-    for m, f in ((top_m, "Poppins-Medium.ttf"), (big_m, "Poppins-ExtraBold.ttf")):
+    for m, f in ((top_m, "Poppins-Medium.ttf"), (big_m, "Poppins-ExtraBold.ttf")) + \
+            (((emph_m, args.emph_font),) if emph_m else ()):
         t = TTFont(os.path.join(FONTS, f))
         m_desc[m] = t["OS/2"].usWinDescent / t["head"].unitsPerEm      # baseline offset per px
         m.ascent = t["OS/2"].sTypoAscender / t["head"].unitsPerEm * 0.72  # lowercase ascender ≈ 0.72 em
@@ -162,8 +165,8 @@ YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Top,{top_m.family},{round(args.top_size * top_m.libass_ratio, 1)},{ass_color('#FFFFFF')},{ass_color('#FFFFFF')},{ass_color('#000000', 0xA0)},{ass_color('#000000', 0x70)},0,0,0,0,100,100,0,0,1,2,2,2,0,0,0,1
-Style: Big,{big_m.family},{round(args.big_size * big_m.libass_ratio, 1)},{ass_color('#FFFFFF')},{ass_color('#FFFFFF')},{ass_color('#000000', 0xA0)},{ass_color('#000000', 0x60)},0,0,0,0,100,100,-1,0,1,2.5,4,2,0,0,0,1
+Style: Top,{top_m.family},{round(args.top_size * top_m.libass_ratio, 1)},{ass_color('#FFFFFF')},{ass_color('#FFFFFF')},{ass_color(args.ink, args.ink_alpha)},{ass_color(args.ink, 0x70)},0,0,0,0,100,100,0,0,1,{args.top_outline},2,2,0,0,0,1
+Style: Big,{big_m.family},{round(args.big_size * big_m.libass_ratio, 1)},{ass_color('#FFFFFF')},{ass_color('#FFFFFF')},{ass_color(args.ink, args.ink_alpha)},{ass_color(args.ink, 0x60)},0,0,0,0,100,100,-1,0,1,{args.big_outline},4,2,0,0,0,1
 Style: Star,{big_m.family},20,{ass_color('#FDE047')},{ass_color('#FDE047')},{ass_color('#000000', 0xFF)},{ass_color('#000000', 0xFF)},0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 
 [Events]
@@ -182,14 +185,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             continue
 
         big_text = display(" ".join(clean(w["text"]) for w in g["big"]), args.uppercase)
-        # fit the big line to the picture width
-        big_px = min(args.big_size, max_w / max(big_m.width(big_text, 1), 1e-6))
-        big_fs = round(big_px * big_m.libass_ratio, 1)
-        big_w = big_m.width(big_text, big_px)
-        big_y = round(base_y + m_desc[big_m] * big_px)          # \an2 anchors the bottom of the line box
-        big_top = base_y - big_m.ascent * big_px
-
         key = big_text.lower() in keywords
+        bm = emph_m if (key and emph_m) else big_m
+        size = args.big_size * (args.emph_scale if bm is emph_m else 1)
+        # fit the big line to the picture width
+        big_px = min(size, max_w / max(bm.width(big_text, 1), 1e-6))
+        big_fs = round(big_px * bm.libass_ratio, 1)
+        big_w = bm.width(big_text, big_px)
+        big_y = round(base_y + m_desc[bm] * big_px)          # \an2 anchors the bottom of the line box
+        big_top = base_y - bm.ascent * big_px
         fade = 120
 
         # --- small top line, words revealed one by one ---
@@ -207,7 +211,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # --- BIG punch word, bounces in on its own timestamp ---
         b_cs = max(s_cs, cs(g["big"][0]["start"]))
         colour = f"\\1c{accent}" if key else ""
-        tags = (f"\\pos({round(cx)},{big_y})\\fs{big_fs}{colour}\\blur1.5"
+        font = f"\\fn{bm.family}\\b1\\i1" if bm is emph_m else ""
+        tags = (f"\\pos({round(cx)},{big_y}){font}\\fs{big_fs}{colour}\\blur1.5"
                 f"\\fscx45\\fscy45\\alpha&H60&"
                 f"\\t(0,120,\\fscx112\\fscy112\\alpha&H00&)\\t(120,230,\\fscx100\\fscy100)\\fad(0,{fade})")
         if e_cs > b_cs:
@@ -248,6 +253,12 @@ def main():
     p.add_argument("--keywords", help="comma-separated punch words that get accent + stars")
     p.add_argument("--burst-gap", type=float, default=2.5, help="min seconds between star bursts")
     p.add_argument("--no-stars", action="store_true")
+    p.add_argument("--emph-font", help="font file in fonts/ for key words, e.g. PlayfairDisplay-BoldItalic.ttf")
+    p.add_argument("--emph-scale", type=float, default=1.05, help="size multiplier for the emphasis font")
+    p.add_argument("--ink", default="#000000", help="outline/shadow colour")
+    p.add_argument("--ink-alpha", type=lambda x: int(x, 0), default=0xA0, help="outline transparency 0x00-0xFF")
+    p.add_argument("--top-outline", type=float, default=2)
+    p.add_argument("--big-outline", type=float, default=2.5)
     p.add_argument("--uppercase", action="store_true")
     p.add_argument("--no-autocrop", action="store_true")
     build(p.parse_args())

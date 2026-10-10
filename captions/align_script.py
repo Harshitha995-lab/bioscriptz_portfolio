@@ -185,6 +185,83 @@ def align(tokens, syl, nuclei, pauses, speech):
     return words, len(anchors)
 
 
+# ---------- speech-recognition anchored alignment (much more exact) ----------
+
+def asr_words(video, model_dir):
+    """Word timings from an offline Vosk model (e.g. vosk-model-small-en-us-0.15)."""
+    from vosk import KaldiRecognizer, Model, SetLogLevel
+    SetLogLevel(-1)
+    rec = KaldiRecognizer(Model(model_dir), SR)
+    rec.SetWords(True)
+    raw = (load_audio(video) * 32768).astype(np.int16).tobytes()
+    out = []
+    for i in range(0, len(raw), 8000):
+        if rec.AcceptWaveform(raw[i:i + 8000]):
+            out += json.loads(rec.Result()).get("result", [])
+    out += json.loads(rec.FinalResult()).get("result", [])
+    return out
+
+
+def align_with_asr(tokens, heard):
+    """Match transcript words to recognised words; matched words take the recognised timing,
+    the rest are spread (by length) between their matched neighbours."""
+    import difflib
+    norm = lambda w: re.sub(r"[^a-z0-9]", "", w.lower().replace("’", "'"))
+    a = [norm(t) for t in tokens]
+    b = [norm(h["word"]) for h in heard]
+    times = [None] * len(tokens)
+    # global (Needleman-Wunsch) alignment with fuzzy word similarity: keeps order, so a repeated
+    # phrase ("I thought I") can't be matched to its later occurrence
+    sim = lambda x, y: difflib.SequenceMatcher(None, x, y).ratio() if x and y else 0.0
+    n, m = len(a), len(b)
+    GAP = -0.6
+    score = np.zeros((n + 1, m + 1))
+    score[:, 0] = GAP * np.arange(n + 1)
+    score[0, :] = GAP * np.arange(m + 1)
+    move = np.zeros((n + 1, m + 1), dtype=np.int8)  # 0 diag, 1 up (skip script word), 2 left (skip heard)
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            r = sim(a[i - 1], b[j - 1])
+            d = score[i - 1, j - 1] + (2.0 if r == 1 else (1.0 if r >= 0.6 else (0.2 if r >= 0.4 else -0.8)))
+            u, l = score[i - 1, j] + GAP, score[i, j - 1] + GAP
+            score[i, j], move[i, j] = max((d, 0), (u, 1), (l, 2))
+    i, j, pairs = n, m, []
+    while i > 0 and j > 0:
+        if move[i, j] == 0:
+            pairs.append((i - 1, j - 1))
+            i, j = i - 1, j - 1
+        elif move[i, j] == 1:
+            i -= 1
+        else:
+            j -= 1
+    exact = 0
+    for ti, hj in pairs:
+        times[ti] = (heard[hj]["start"], heard[hj]["end"])
+        exact += a[ti] == b[hj]
+    matched = exact
+    i = 0
+    while i < len(tokens):
+        if times[i] is not None:
+            i += 1
+            continue
+        j = i
+        while j < len(tokens) and times[j] is None:
+            j += 1
+        t0 = times[i - 1][1] if i else (times[j][0] - 0.3 * (j - i) if j < len(tokens) else 0)
+        t1 = times[j][0] if j < len(tokens) else t0 + 0.3 * (j - i)
+        t0 = max(0.0, min(t0, t1))
+        weights = [len(a[k]) + 1 for k in range(i, j)]
+        acc, tot = 0, sum(weights)
+        for k, wgt in zip(range(i, j), weights):
+            s0 = t0 + (t1 - t0) * acc / tot
+            acc += wgt
+            times[k] = (s0, t0 + (t1 - t0) * acc / tot)
+        i = j
+    words = [{"word": " " + t, "start": round(s, 3), "end": round(max(e, s + 0.05), 3)}
+             for t, (s, e) in zip(tokens, times)]
+    return words, matched
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("video")
@@ -192,12 +269,24 @@ def main():
     p.add_argument("-o", "--output", default="words.json")
     p.add_argument("--pause-db", type=float, default=-12, help="pause threshold relative to median level (dB)")
     p.add_argument("--min-pause", type=float, default=0.18, help="shortest gap treated as a pause (s)")
+    p.add_argument("--vosk-model", help="path to an offline Vosk model folder: uses real speech recognition "
+                                         "timings (recommended, much tighter lip sync)")
     args = p.parse_args()
 
     text = read_transcript(args.transcript)
     tokens = re.findall(r"[A-Za-z0-9'’]+[.,!?;:]?", text)
     d = syllable_dict({"overcomplicating": 6})
     syl = [d.get(re.sub(r"[^a-z']", "", t.lower().replace("’", "'")), None) or guess_syllables(t) for t in tokens]
+
+    if args.vosk_model:
+        heard = asr_words(args.video, args.vosk_model)
+        words, matched = align_with_asr(tokens, heard)
+        json.dump({"language": "en", "source": "align_script.py (vosk)", "segments": [
+            {"start": words[0]["start"], "end": words[-1]["end"], "text": text, "words": words}]},
+            open(args.output, "w", encoding="utf-8"), indent=1)
+        print(f"{len(tokens)} transcript words, {len(heard)} recognised, {matched} matched exactly "
+              f"({100 * matched // len(tokens)}%), rest interpolated -> {args.output}")
+        return
 
     audio = load_audio(args.video)
     nuclei, pauses, speech = analyse(audio, args.pause_db, args.min_pause)

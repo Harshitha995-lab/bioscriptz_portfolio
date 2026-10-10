@@ -77,6 +77,27 @@ python3 align_script.py video.mp4 Timeline_1.docx -o words.json
 
 It detects the syllable beats in your voice, snaps sentence breaks to real pauses, and ignores the transcript's `(00:05)` stamps. That means it still works if the clip was sped up or re-cut after you transcribed it. Expect roughly ±0.2s accuracy per word; Whisper is more exact.
 
+## Full reel: auto-edit + captions + motion graphics
+
+To make the same reel from your own clip, run these four steps:
+
+```bash
+# 1. word timings from your transcript + offline speech recognition (tight lip sync)
+python3 align_script.py clip.mov transcript.docx --vosk-model vosk-model-small-en-us-0.15 -o words.json
+# 2. jump cuts (filler words + verified silences), vertical reframe, colour, punch-ins, -14 LUFS voice
+python3 reel_edit.py clip.mov words.json -o reel_base.mp4 --words-out reel_words.json \
+    --drop-words honestly --punch overcomplicating,clearer --desat forgot-people
+# 3. captions + word-anchored motion graphics, then burn in
+python3 build_stacked_captions.py reel_words.json --video reel_base.mp4 --no-autocrop -o captions.ass \
+    --y-frac 0.78 --accent "#FFC83D" --emph-font PlayfairDisplay-BoldItalic.ttf --ink "#14121F"
+python3 motion_graphics.py reel_words.json --captions captions.ass --merge final.ass
+ffmpeg -i reel_base.mp4 -vf "ass=final.ass:fontsdir=fonts" -c:v libx264 -crf 20 -c:a copy reel.mp4
+```
+
+The Vosk English model (`vosk-model-small-en-us-0.15`, about 40 MB) comes from alphacephei.com/vosk/models. Install it with `pip install vosk`.
+
+`RESOLVE_BUILD_PLAN.md` explains how to rebuild the same edit by hand in DaVinci Resolve: timeline, cuts, colour, captions, Fusion recipes, Fairlight and render presets.
+
 ## Editing in DaVinci Resolve
 
 Resolve can't play `.ass` animations. Instead, render the captions as a **transparent overlay clip** and stack it above your footage. The video stays untouched on V1, and you keep full control in the edit.
