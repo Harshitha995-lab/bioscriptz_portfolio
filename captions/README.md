@@ -4,7 +4,7 @@ Burns kinetic, word-by-word captions onto a video. The original frame and audio 
 
 | Setting | Value |
 |---|---|
-| Font | **Inter Bold** (bundled in `fonts/`, SIL OFL) |
+| Font | **Inter Bold** (bundled in `fonts/`, SIL OFL). The reel style uses **Poppins**. |
 | Size | **36px**, measured like CSS/Figma (the em box is 36px). libass sizes fonts differently, so the script converts automatically. |
 | Colour | White text with a subtle soft drop shadow and a thin dark edge for contrast on busy backgrounds |
 | Highlight | The word being spoken turns **#FACC15** (bright yellow). Use `--accent "#6366F1"` for indigo. |
@@ -52,6 +52,30 @@ SKIP_TRANSCRIBE=1 ./render.sh video.mp4             # re-style without re-transc
 ```
 
 On Windows, run the three commands from `render.sh` by hand (see "Step by step" below), or use Git Bash.
+
+## Reel style: small line + BIG word (word by word)
+
+`build_stacked_captions.py` makes stacked captions: a small Poppins Medium line on top, then one big Poppins ExtraBold punch word underneath.
+
+- **Word-by-word reveal:** each small word pops in as you say it, and the big word bounces in on its own timestamp.
+- **Accent words:** key words (`--keywords`, or the built-in list such as *overcomplicating* and *personal brand*) turn yellow and get a star burst.
+- **Fitting:** long punch words shrink automatically to fit the picture.
+
+```bash
+python3 build_stacked_captions.py words.json --video video.mp4 -o stacked.ass
+ffmpeg -i video.mp4 -vf "ass=stacked.ass:fontsdir=fonts" -c:v libx264 -crf 16 -c:a copy video_captioned.mp4
+```
+
+Useful flags: `--top-size 40`, `--big-size 118`, `--accent "#FDE047"`, `--no-stars`, `--uppercase`, `--min-top 2 --max-top 6` (how many small words appear before each punch).
+
+### No Whisper? Time your own transcript
+If you already have the transcript (for example the `.docx` that Premiere or Resolve exports), `align_script.py` times it to the audio offline. It needs no model download, only `pip install scipy pocketsphinx`.
+
+```bash
+python3 align_script.py video.mp4 Timeline_1.docx -o words.json
+```
+
+It detects the syllable beats in your voice, snaps sentence breaks to real pauses, and ignores the transcript's `(00:05)` stamps. That means it still works if the clip was sped up or re-cut after you transcribed it. Expect roughly ±0.2s accuracy per word; Whisper is more exact.
 
 ## Editing in DaVinci Resolve
 

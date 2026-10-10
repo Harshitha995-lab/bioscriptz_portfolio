@@ -1,2 +1,4 @@
 faster-whisper>=1.0
 fonttools>=4.40
+scipy>=1.10
+pocketsphinx>=5.0
