@@ -92,3 +92,97 @@ def render_shortlist(picks, notes: list[str], date: str, sample: bool, experimen
                 lines.append(f"- Evidence: [@{e['account']}]({e['url']}), {e['plays']:,} plays")
             lines.append("")
     return "\n".join(lines)
+
+
+def _hook_line(bd) -> str:
+    parts = []
+    for ch, label, key in (("audio", "audio", "text"), ("text", "on-screen text", "text"), ("video", "visual", "description")):
+        h = bd.hooks[ch]
+        if not h["analysed"]:
+            parts.append(f"{label}: not analysed")
+        elif h["type"] == "none":
+            parts.append(f"{label}: none")
+        else:
+            body = h.get(key) or ""
+            warn = " ⚠️ not found verbatim in transcript" if ch == "audio" and body and not h["verified_quote"] else ""
+            parts.append(f"{label}: “{body}” ({h['type']}){warn}" if body else f"{label}: {h['type']}")
+    return " · ".join(parts)
+
+
+def render_viral_analysis(va, topics: list, reels_by_id: dict, date: str, sample: bool) -> str:
+    from .viral_analysis import describe_feature
+
+    cov = va.coverage
+    lines = [f"# Viral analysis: why Reels on the same topic travelled further. Week of {date}", ""]
+    if sample:
+        lines += ["> **SAMPLE RUN.** Synthetic Reels, text-only rule-based analysis, no video frames. The numbers below show the "
+                  "format of the report, not anything real about Instagram.", ""]
+    lines += [
+        "**How to read this.** Each Reel's presentation (hooks, format, story loop, spice, CTA) was described by the analyst "
+        "*without seeing its view count*. The comparisons below were then computed in code, between viral Reels and non-viral Reels "
+        "on the **same topic**. This shows what viral Reels did differently *in this sample*. It is correlation, not proof, and small "
+        "samples throw up patterns by chance. `q` corrects for testing many features at once, so trust “likely real” most.",
+        "",
+        f"**Coverage:** {cov['reels_analysed']} Reels analysed ({cov['failed']} failed), {cov['with_frames']} with video frames. "
+        f"Hooks analysed: audio {cov['audio_hook_analysed']}, on-screen text {cov['text_hook_analysed']}, visual {cov['video_hook_analysed']}.",
+    ]
+    if cov["with_frames"] == 0:
+        lines.append("> Video and on-screen-text hooks, format, tone and pacing were **not analysed**: no video frames were available "
+                     "(they need a video URL from the scraper and ffmpeg). Only the audio hook, story loop, spice, CTA and structure are covered.")
+    if cov["unverified_audio_quotes"]:
+        lines.append(f"> {cov['unverified_audio_quotes']} audio-hook quote(s) could not be found word for word in the transcript; they are marked ⚠️.")
+    for e in cov["errors"]:
+        lines.append(f"> Error: {e}")
+    lines.append("")
+
+    lines += [f"## Across all topics: what separates the winners", f"Comparison: {va.pooled_basis}. Group sizes: {va.pooled_n[0]} vs {va.pooled_n[1]}.", ""]
+    if va.pooled:
+        lines += ["| Feature | Viral | Not viral | Gap | Read |", "|---|---|---|---|---|"]
+        for c in va.pooled[:12]:
+            lines.append(f"| {describe_feature(c.feature)} | {c.viral_yes}/{c.viral_n} | {c.rest_yes}/{c.rest_n} | {c.gap:+.0%} | {c.read} |")
+    else:
+        lines.append("No feature separated the groups by enough to report. That is a real result, not a failure: with this sample, "
+                     "presentation did not clearly differ.")
+    lines.append("")
+
+    by_name = {t.name: t for t in topics}
+    for i, ta in enumerate(va.topics, start=1):
+        t = by_name[ta.topic]
+        lines += [f"## {i}. {ta.topic}",
+                  f"Compared: {ta.basis}" + (f" ({len(ta.viral_ids)} vs {len(ta.rest_ids)})." if ta.rest_ids else f" ({len(ta.viral_ids)} viral Reels described below)."), ""]
+        if ta.rest_ids and not ta.contrasts and not ta.error:
+            lines += ["No feature separated the viral Reels from the rest by enough to report for this topic.", ""]
+        ex = ta.explanation
+        if ta.error:
+            lines.append(f"> {ta.error}")
+        if ex:
+            lines.append(ex.get("summary", ""))
+            for key, title in (("what_to_copy", "Worth copying"), ("what_not_to_copy", "Not worth copying")):
+                if ex.get(key):
+                    lines.append(f"**{title}:** " + "; ".join(describe_feature(x) for x in ex[key]))
+            if ex.get("template"):
+                lines += ["", "**Template to adapt (fill the [brackets] from your own experience):**", "", f"> {ex['template']}"]
+            for cav in ex.get("caveats", []):
+                lines.append(f"- Caveat: {cav}")
+            lines.append("")
+        if ta.contrasts:
+            lines += ["| Feature | Viral | Not viral | Gap | Read |", "|---|---|---|---|---|"]
+            for c in ta.contrasts[:8]:
+                lines.append(f"| {describe_feature(c.feature)} | {c.viral_yes}/{c.viral_n} | {c.rest_yes}/{c.rest_n} | {c.gap:+.0%} | {c.read} |")
+            lines.append("")
+        positive = {c.feature for c in ta.contrasts if c.gap > 0 and c.read != "weak"}
+        for rid in ta.viral_ids[:3]:
+            bd, r = va.breakdowns[rid], reels_by_id[rid]
+            f = va.features.get(rid, {})
+            lines.append(f"**[@{r.account}]({r.url})**: {r.plays:,} plays, {r.reach_ratio:.1f}× its follower count")
+            lines.append(f"- Hooks: {_hook_line(bd)}")
+            loop = bd.loop
+            lines.append(f"- Format: {bd.format} · Loop: {loop['type']}" + (f" (opens: “{loop['open_loop']}”)" if loop.get("open_loop") else "")
+                         + (f" · Re-hook: “{loop['re_hook']}”" if loop.get("re_hook") else ""))
+            lines.append(f"- Structure: " + " → ".join(b["beat"] for b in bd.structure))
+            lines.append(f"- Spice: {', '.join(bd.spice) or 'none'} · CTA: {bd.cta['type']}")
+            standouts = [describe_feature(x) for x in sorted(positive) if f.get(x)]
+            if standouts:
+                lines.append(f"- Shares features linked to reach in this topic: {'; '.join(standouts)}")
+            lines.append("")
+    return "\n".join(lines)

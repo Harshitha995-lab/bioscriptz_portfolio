@@ -1,0 +1,13 @@
+{
+  "_notes": "The words the Viral Analyst may use. Edit freely; unknown words from the model are stored as 'other'. 'spice' = devices added on top of a plain version of the topic.",
+  "hook_types": ["question", "bold-claim", "contrarian", "number-list", "confession", "curiosity-gap", "direct-address", "story-start", "none"],
+  "visual_hook_types": ["face-to-camera", "text-card", "b-roll", "screen-recording", "pattern-interrupt", "demo", "reaction", "none"],
+  "formats": ["talking-head", "voiceover-broll", "screen-recording", "text-on-screen", "skit", "interview-clip", "other"],
+  "beats": ["hook", "setup", "point", "proof", "twist", "payoff", "cta"],
+  "loop_types": ["curiosity-gap", "countdown-list", "problem-solution", "before-after", "mystery-reveal", "myth-bust", "none"],
+  "spice": ["specific-number", "personal-stake", "named-enemy", "pattern-interrupt", "social-proof", "unexpected-comparison", "time-constraint", "controversy", "humor", "demonstration", "re-hook-midway", "payoff-teaser"],
+  "spice_needs_frames": ["pattern-interrupt", "demonstration"],
+  "cta_types": ["comment-keyword", "dm", "link", "follow", "save-share", "none"],
+  "tones": ["raw", "polished", "mixed"],
+  "pacing": ["fast", "medium", "slow"]
+}

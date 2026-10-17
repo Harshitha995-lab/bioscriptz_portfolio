@@ -18,6 +18,8 @@ FIELD_CANDIDATES = {
     "plays": ["videoPlayCount", "playsCount", "playCount", "viewCount", "videoViewCount", "views"],
     "likes": ["likesCount", "likeCount", "likes"],
     "comments": ["commentsCount", "commentCount", "comments"],
+    "video": ["videoUrl", "video_url", "videoUrlHd", "videoPlayUrl"],
+    "duration": ["videoDuration", "duration", "videoDurationSeconds"],
     "posted": ["timestamp", "takenAt", "taken_at", "postedAt", "date", "createdAt"],
 }
 
@@ -48,6 +50,14 @@ def to_int(value) -> int:
         return 0
 
 
+def to_float(value) -> float | None:
+    try:
+        v = float(value)
+        return v if v > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 def item_to_reel(item: dict, field_map: dict | None = None, source: str = "") -> Reel | None:
     fm = {**FIELD_CANDIDATES, **(field_map or {})}
     rid, url = first(item, fm["id"]), first(item, fm["url"])
@@ -69,6 +79,8 @@ def item_to_reel(item: dict, field_map: dict | None = None, source: str = "") ->
         likes=to_int(first(item, fm["likes"])),
         comments=to_int(first(item, fm["comments"])),
         posted_at=parse_datetime(first(item, fm["posted"])),
+        video_url=str(first(item, fm["video"]) or ""),
+        duration_s=to_float(first(item, fm["duration"])),
         source=source,
     )
 

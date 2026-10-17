@@ -52,5 +52,15 @@
     "topics": 5,
     "angles_per_topic": 3,
     "experiment_slots": 1
+  },
+  "viral_analysis": {
+    "enabled": true,
+    "viral_per_topic": 6,
+    "peers_per_topic": 6,
+    "peer_pool_max": 400,
+    "max_reels": 120,
+    "frames": true,
+    "min_group": 3,
+    "min_gap": 0.25
   }
 }

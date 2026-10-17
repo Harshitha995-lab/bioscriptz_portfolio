@@ -36,7 +36,7 @@ Sample mode uses made-up Reels and a simple rule-based stand-in for the language
 
 ## What is tested, and what is not
 
-Tested (64 unit tests, standard library only): triage filters, metric maths, dedupe, topic
+Tested (99 unit tests, standard library only): triage filters, metric maths, dedupe, topic
 labelling and grouping, score combination and missing-data handling, field mapping for several
 Apify field-name styles, and the Apify/Anthropic glue code against stand-in modules.
 
@@ -55,6 +55,39 @@ On a *synthetic* pool of 1,000 random Reels the default bar kept about 115. That
 is, not what Instagram will give. Fewer than 20 survivors prints a warning. 115 Reels would group
 into well under 100 topics, so getting close to 100 topics means scraping more Reels or loosening the
 bar; thin topics (one Reel or one account) are flagged in the report instead of hidden.
+
+## Viral analysis: why one Reel on a topic travelled further than another
+
+`out/week_<date>/viral_analysis.md`. Built on one idea: the same topic gets presented differently by
+different creators, so compare Reels on the **same topic** that reached very different audiences.
+
+1. **Comparison group.** Reels that failed the viral bar are not thrown away. They are labelled against the
+   top topics' names and become the "non-viral" side of each topic (up to `peer_pool_max`).
+2. **Describe, blind.** For the strongest viral Reels and a spread of the non-viral ones, the analyst writes down
+   how each is built: **three hook channels** (audio = first spoken line, text = on-screen text in the first 3 s,
+   video = what we see in the first 3 s), format, tone, pacing, story loop (open question, payoff, re-hook),
+   "spice" devices (specific number, personal stake, named enemy, pattern interrupt...), beats and CTA. It is
+   **never shown plays, likes or follower counts**, so it cannot explain a success after the fact. Words come from
+   `config/viral_vocab.json`, which you can edit.
+3. **Compare, in code.** Each presentation feature becomes a yes/no. Viral vs non-viral prevalence is compared with
+   Fisher's exact test, corrected for testing many features at once (Benjamini-Hochberg). Pooled results are
+   **matched per topic**, so one big topic cannot masquerade as a presentation effect. Each result is read as
+   "likely real", "possible (may be luck)" or "weak".
+4. **Explain.** Only then does a model write the explanation, a what-to-copy list and a fill-in-the-blank template,
+   under rules to claim nothing the numbers do not show.
+
+Why the correction: on 500 simulated pure-noise datasets, an uncorrected analysis reported a "pattern" 52% of the
+time; with the correction a false "likely real" pattern appeared 3% of the time.
+
+**Video and on-screen-text hooks need frames.** They come from the first ~3 s and two later frames of each video,
+which needs a direct video URL from the scraper (`videoUrl`) and `ffmpeg` on the machine. Without them, the
+report says "not analysed" for the text and video hooks, format, tone and pacing, and covers the audio hook, loop,
+spice, CTA and structure from the transcript. Videos are downloaded to a temporary folder, sampled, and deleted;
+nothing is kept. Settings are under `viral_analysis` in `config/settings.json`.
+
+Limits: a comparison needs at least 3 Reels per side; small samples mostly show nothing, and the report says so
+instead of inventing reasons. It shows correlation in this week's sample, not proof of cause. Cost is not measured:
+each analysed Reel is one model call with up to 6 small images, so cap it with `viral_analysis.max_reels`.
 
 ## The angle step
 
@@ -81,6 +114,5 @@ account's usual" when the account's median is unknown; transcripts depend on the
 
 ## Not built yet
 
-The Breakdown Analyst's full template (structure, proof, funnel move per Reel), the weekly email,
-the DNA Playbook, other platforms. The "radical triad system" is not implemented: it is not a term
+The weekly email, the DNA Playbook, other platforms. The "radical triad system" is not implemented: it is not a term
 I recognise, so the 100 -> 10 cut uses the topic score above until its three parts are defined.

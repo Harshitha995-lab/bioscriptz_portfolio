@@ -8,7 +8,7 @@ from typing import Protocol
 
 
 class LLM(Protocol):
-    def complete_json(self, system: str, user: str) -> dict: ...
+    def complete_json(self, system: str, user: str, images: list[bytes] | None = None) -> dict: ...
 
 
 def parse_json(text: str) -> dict:
@@ -31,11 +31,19 @@ class AnthropicLLM:
         self.model = model or os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
         self.max_tokens = max_tokens
 
-    def complete_json(self, system: str, user: str) -> dict:
+    def complete_json(self, system: str, user: str, images: list[bytes] | None = None) -> dict:
+        """images: JPEG bytes, sent before the text. Only passed when frames exist."""
+        import base64
+
+        content: list = [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(img).decode()}}
+            for img in (images or [])
+        ]
+        content.append({"type": "text", "text": user})
         msg = self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
             system=system + "\n\nRespond with a single JSON object and nothing else.",
-            messages=[{"role": "user", "content": user}],
+            messages=[{"role": "user", "content": content if images else user}],
         )
         return parse_json("".join(b.text for b in msg.content if b.type == "text"))

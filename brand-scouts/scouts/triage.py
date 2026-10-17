@@ -82,6 +82,13 @@ def looks_relevant(reel: Reel, terms: list[str]) -> bool:
 
 
 def triage(reels: list[Reel], cfg: TriageConfig, now: datetime | None = None) -> tuple[list[Reel], dict]:
+    kept, _, stats = triage_split(reels, cfg, now)
+    return kept, stats
+
+
+def triage_split(reels: list[Reel], cfg: TriageConfig, now: datetime | None = None) -> tuple[list[Reel], list[Reel], dict]:
+    """Like triage, but also returns the clean-but-not-viral Reels. Those are the comparison group for
+    'same topic, different presentation, very different reach'."""
     now = now or utcnow()
     stats = {"input": len(reels)}
     reels = dedupe(reels)
@@ -103,12 +110,15 @@ def triage(reels: list[Reel], cfg: TriageConfig, now: datetime | None = None) ->
     out = percentile_ranks([r.outperformance for r in reels])
     for r, v, o in zip(reels, vel, out):
         r.heat = round(0.5 * v + 0.5 * o, 2)
-    reels = [r for r in reels if r.heat >= cfg.min_heat and r.outperformance >= cfg.min_outperformance]
+    clears = lambda r: r.heat >= cfg.min_heat and r.outperformance >= cfg.min_outperformance
+    below_bar = [r for r in reels if not clears(r)]
+    reels = [r for r in reels if clears(r)]
     stats["after_viral_bar"] = len(reels)
+    stats["below_bar"] = len(below_bar)
     reels.sort(key=lambda r: r.heat, reverse=True)
     reels = reels[: cfg.keep_top]
     stats["kept"] = len(reels)
     if len(reels) < cfg.warn_below:
         stats["warning"] = (f"Only {len(reels)} Reels cleared the viral bar (min_heat {cfg.min_heat}, "
                             f"min_outperformance {cfg.min_outperformance}). Scrape more or loosen the bar in config/settings.json.")
-    return reels, stats
+    return reels, below_bar, stats

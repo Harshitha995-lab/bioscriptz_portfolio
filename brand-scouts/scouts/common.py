@@ -47,6 +47,8 @@ class Reel:
     posted_at: Optional[datetime] = None
     source: str = ""
     account_median_plays: Optional[float] = None
+    video_url: str = ""            # direct video file, for frame extraction (Apify links can expire)
+    duration_s: Optional[float] = None
     # derived by triage
     velocity: float = 0.0        # plays per day since posting
     reach_ratio: float = 0.0     # plays / max(followers, 1000)

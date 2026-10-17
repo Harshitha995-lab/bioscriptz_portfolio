@@ -173,5 +173,17 @@ class ViralBarTests(unittest.TestCase):
         self.assertTrue(all(r.heat >= cfg.min_heat and r.outperformance >= cfg.min_outperformance for r in kept))
 
 
+class SplitTests(unittest.TestCase):
+    def test_below_bar_reels_are_returned_not_lost(self):
+        from scouts.triage import triage_split
+        reels = [reel(i, plays=10000 + 1000 * i, followers=2000) for i in range(50)]
+        kept, below, stats = triage_split(reels, TriageConfig(min_plays=0, min_heat=80, min_outperformance=0), NOW)
+        self.assertEqual(len(kept) + len(below), 50)
+        self.assertEqual(stats["below_bar"], len(below))
+        self.assertFalse({r.id for r in kept} & {r.id for r in below})
+        self.assertTrue(all(r.heat < 80 for r in below))
+        self.assertTrue(all(r.heat >= 80 for r in kept))
+
+
 if __name__ == "__main__":
     unittest.main()

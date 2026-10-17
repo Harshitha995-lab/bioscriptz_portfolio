@@ -36,6 +36,7 @@ class Topic:
     weights_used: dict = field(default_factory=dict)
     score: float = 0.0                           # 0-100
     notes: list = field(default_factory=list)
+    peers: list = field(default_factory=list)    # same-topic Reels that did NOT clear the viral bar (comparison group)
 
     @property
     def accounts(self) -> set:

@@ -46,7 +46,11 @@ generic listicles, hustle hype, vanity metrics.
 7. HUMAN DECISION. AI surfaces and ranks. Harshitha makes the final topic and
    angle choice. The system never decides or posts on its own.
 
-## Breakdown Analyst (separate agent, stronger model)
+## Viral analysis / Breakdown Analyst (separate agent, stronger model)
+Implemented. See README.md, "Viral analysis". Describes each Reel blind to performance across three hook
+channels (audio, on-screen text, video), format, story loop and spice; compares viral vs non-viral Reels on the
+same topic in code; explains only what the numbers show. Original sketch kept below.
+
 For each top Reel: link, hook (exact words + type), structure beat by beat,
 proof, CTA and type, content angle, funnel move, why it worked, and a
 "your version" idea. Topic tag from an editable fixed list.
