@@ -1,0 +1,23 @@
+{
+  "triage": {
+    "max_age_days": 14,
+    "min_plays": 5000,
+    "keep_top": 300,
+    "spam_terms": ["giveaway", "follow for follow", "f4f", "free iphone", "click link to win"],
+    "relevance_terms": ["brand", "founder", "linkedin", "content", "audience", "followers", "creator", "storytell", "ghostwrit", "personal", "trust", "viral", "post", "build in public", "thought leader"]
+  },
+  "scoring": {
+    "top_n": 10,
+    "weights": {
+      "viral_evidence": 30,
+      "breadth": 20,
+      "momentum": 10,
+      "conversion": 15,
+      "brand_match": 15,
+      "history": 10
+    }
+  },
+  "harvest": {
+    "max_reels": 800
+  }
+}

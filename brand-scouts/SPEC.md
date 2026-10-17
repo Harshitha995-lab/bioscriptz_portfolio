@@ -1,6 +1,8 @@
 # Brand Scouts: Build Spec (v0.1)
 
-Status: spec only. No agent code exists yet.
+Status: Instagram steps 1-4 are implemented (harvest, triage, topic labelling, scoring) and unit
+tested offline; not yet run against live Apify/Anthropic. Steps 5-7 and the Playbook are not built.
+See README.md.
 
 ## Goal
 Every week, surface the winning personal-branding topics on Instagram Reels,

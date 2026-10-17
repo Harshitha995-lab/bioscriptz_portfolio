@@ -1,0 +1,16 @@
+{
+  "_notes": [
+    "Set actor_id to the Apify Instagram Reels scraper you choose, then fit input_template to that actor's input schema (see its Input tab).",
+    "Two candidates seen in a web search, neither tested here: api-empire/instagram-reels-scraper (hashtag and keyword search) and sones/instagram-reels-scraper-lowcost (adds transcripts). Check price and recent reviews first.",
+    "Placeholders {hashtags} and {terms} are filled from config/keywords.txt (lines starting with # are hashtags).",
+    "The real spending guard is the monthly usage limit on your Apify account. Set one before the first live run.",
+    "On the first live run, open out/<week>/raw_sample.json and check the field names; add any that differ under field_map."
+  ],
+  "actor_id": "REPLACE_ME",
+  "input_template": {
+    "hashtags": "{hashtags}",
+    "searchTerms": "{terms}",
+    "resultsLimit": 30
+  },
+  "field_map": {}
+}

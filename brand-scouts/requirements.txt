@@ -1,0 +1,3 @@
+# Needed only for live runs. Sample mode and the tests use the standard library alone.
+apify-client
+anthropic
