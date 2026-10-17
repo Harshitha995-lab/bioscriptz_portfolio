@@ -59,3 +59,36 @@ def write_outputs(out_dir: Path, date: str, reels, topics: list[Topic], stats: d
     (out_dir / "topics.json").write_text(json.dumps([t.to_dict() for t in topics], indent=2), encoding="utf-8")
     (out_dir / "run_stats.json").write_text(json.dumps(stats, indent=2, default=str), encoding="utf-8")
     (out_dir / "top10.md").write_text(render_markdown(topics, date, weights, top_n, sample), encoding="utf-8")
+
+
+def render_shortlist(picks, notes: list[str], date: str, sample: bool, experiment_slots: int) -> str:
+    lines = [f"# Instagram shortlist: week of {date}", ""]
+    if sample:
+        lines += ["> **SAMPLE RUN.** Synthetic data, rule-based labelling and placeholder angle text. Not real results.", ""]
+    lines += [
+        "How this was chosen: the top topics by score were each tested against the content angles, using how that "
+        "angle performed in the topic this week, how it performs across all topics this week, and a fit check "
+        "against your brand brief. Most picks are data-backed; "
+        f"{experiment_slots} slot(s) are reserved for an experiment, so the list does not only repeat what has already worked. "
+        "**You make the final call.**",
+        "",
+    ]
+    for n in notes:
+        lines += [f"> Note: {n}", ""]
+    for i, p in enumerate(picks, start=1):
+        label = "DATA-BACKED" if p.slot == "data" else "EXPERIMENT"
+        thin = " ⚠️ thin evidence" if p.topic.thin else ""
+        lines.append(f"## {i}. {p.topic.name} [{label}]: topic score {p.topic.score / 10:.1f}/10{thin}")
+        lines.append(f"{len(p.topic.reels)} Reels from {len(p.topic.accounts)} accounts, {p.topic.total_plays:,} plays in total.")
+        lines.append("")
+        for a in p.angles:
+            seen = f"proven: {a.evidence_n} Reel(s) this week" if a.kind == "proven" else "UNTESTED in this topic this week (experiment)"
+            lines.append(f"### {a.angle}: {a.score / 10:.1f}/10 ({seen})")
+            lines.append(f"- Pitch: {a.pitch or '(none generated)'}")
+            lines.append(f"- Hook: “{a.hook}”" if a.hook else "- Hook: (none generated)")
+            fit = f"{a.fit:.0f}" if a.fit is not None else "n/a"
+            lines.append(f"- Fit with your brand: {fit}. {a.fit_reason}")
+            for e in a.evidence_reels:
+                lines.append(f"- Evidence: [@{e['account']}]({e['url']}), {e['plays']:,} plays")
+            lines.append("")
+    return "\n".join(lines)

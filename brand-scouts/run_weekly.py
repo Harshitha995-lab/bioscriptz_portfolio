@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Weekly Instagram winners: harvest -> triage -> label -> group -> score -> report.
+"""Weekly Instagram winners: harvest -> triage -> label -> group -> score -> angles -> shortlist.
 
     python3 run_weekly.py --sample     # offline demo on synthetic data
     python3 run_weekly.py --live       # Apify + Anthropic; needs keys and config/apify.json
@@ -13,9 +13,10 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
+from scouts.angles import expand_angles, load_angles, shortlist
 from scouts.common import ROOT, Reel, load_env, load_json, read_lines, utcnow
 from scouts.playbook import EmptyPlaybook
-from scouts.report import write_outputs
+from scouts.report import render_shortlist, write_outputs
 from scouts.scoring import compute_factors, score_brand_match, score_topics
 from scouts.topics import group_topics, label_reels
 from scouts.triage import TriageConfig, triage
@@ -49,6 +50,7 @@ def main(argv=None) -> int:
     out_dir = Path(args.out) if args.out else ROOT / "out" / f"week_{date}"
     brief = (ROOT / "config" / "brand_brief.md").read_text(encoding="utf-8")
     known_topics = read_lines(ROOT / "config" / "topics.txt")
+    angles = load_angles(ROOT / "config" / "angles.txt")
     stats: dict = {"mode": "sample" if args.sample else "live", "date": date}
 
     if args.sample:
@@ -74,7 +76,7 @@ def main(argv=None) -> int:
             return 3
 
     kept, stats["triage"] = triage(reels, TriageConfig.from_dict(settings["triage"]), now)
-    labelled, stats["labelling"] = label_reels(kept, llm, known_topics)
+    labelled, stats["labelling"] = label_reels(kept, llm, known_topics, angles=list(angles))
     if not labelled:
         print(f"No Reels were labelled. Errors: {stats['labelling']['errors'] or 'none'}", file=sys.stderr)
         return 3
@@ -86,12 +88,22 @@ def main(argv=None) -> int:
     ranked = score_topics(topics, settings["scoring"]["weights"])
     stats["topics"] = len(ranked)
 
+    sl = settings["shortlist"]
+    top = ranked[: sl["expand_top"]]
+    ideas = expand_angles(top, llm, angles, brief, EmptyPlaybook())
+    picks, notes = shortlist(top, ideas, sl["topics"], sl["angles_per_topic"], sl["experiment_slots"])
+    stats["angle_ideas"] = len(ideas)
+    stats["shortlist"] = {"topics": len(picks), "experiments": sum(p.slot == "experiment" for p in picks), "notes": notes}
+
     write_outputs(out_dir, date, labelled, ranked, stats, settings["scoring"]["weights"], settings["scoring"]["top_n"], args.sample)
+    (out_dir / "angles.json").write_text(json.dumps([i.to_dict() for i in ideas], indent=2), encoding="utf-8")
+    (out_dir / "shortlist.json").write_text(json.dumps([p.to_dict() for p in picks], indent=2), encoding="utf-8")
+    (out_dir / "shortlist.md").write_text(render_shortlist(picks, notes, date, args.sample, sl["experiment_slots"]), encoding="utf-8")
     if args.save_state:
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps({t.name: t.total_plays for t in ranked}, indent=2), encoding="utf-8")
     print(json.dumps(stats, indent=2, default=str))
-    print(f"\nWrote {out_dir}/top10.md")
+    print(f"\nWrote {out_dir}/shortlist.md and top10.md")
     return 0
 
 

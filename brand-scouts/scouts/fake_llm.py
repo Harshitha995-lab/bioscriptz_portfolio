@@ -27,7 +27,26 @@ class FakeLLM:
                 if name == data["topic"]:
                     return {"score": score, "reason": reason}
             return {"score": 40, "reason": "No rule for this topic."}
+        if "[TASK:angles]" in system:
+            return {"angles": [self._angle(data["topic"], a["name"]) for a in data["angles"]]}
         raise ValueError("unknown task")
+
+    # (topic, angle) -> fit. Anything not listed gets a middling 55. Sample data only.
+    FIT = {
+        ("Content that converts into leads", "proof"): 92,
+        ("Content that converts into leads", "how-to"): 90,
+        ("Trust beats content volume", "authority"): 91,
+        ("Trust beats content volume", "story"): 84,
+        ("Personal branding feels cringe", "contrarian"): 88,
+        ("Founder origin stories", "story"): 93,
+        ("Founder origin stories", "authority"): 80,
+        ("Systems over daily posting", "how-to"): 72,
+    }
+
+    def _angle(self, topic: str, angle: str) -> dict:
+        return {"angle": angle, "pitch": f"[sample] The {angle} angle on '{topic}'.",
+                "hook": f"[sample hook] {topic}: the {angle} version.",
+                "fit": self.FIT.get((topic, angle), 55), "reason": "Sample rule-based fit, not a real judgement."}
 
     def _label(self, reel: dict) -> dict:
         text = f"{reel['caption']}\n{reel['transcript']}"

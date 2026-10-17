@@ -1,7 +1,8 @@
 # Brand Scouts: Build Spec (v0.1)
 
-Status: Instagram steps 1-4 are implemented (harvest, triage, topic labelling, scoring) and unit
-tested offline; not yet run against live Apify/Anthropic. Steps 5-7 and the Playbook are not built.
+Status: Instagram steps 1-6 are implemented (harvest, triage, topic labelling, scoring, angle testing,
+shortlist with the experiment slot) and unit tested offline; not yet run against live Apify/Anthropic.
+Step 7 is Harshitha's decision. The Playbook and other platforms are not built.
 See README.md.
 
 ## Goal
@@ -35,9 +36,10 @@ generic listicles, hustle hype, vanity metrics.
 4. SCORE (about 100 topics -> top 10). One scorer prompt is run once per topic,
    in parallel, scoring 1-100 for viral potential against the DNA Playbook
    plus current viral data. Keep the top 10.
-5. ANGLES (10 topics x 10 angles = 100 variations -> about 5 topics with 2-3
-   angles each). Each variation is rescored against the Playbook for similar
-   angles and structures that worked.
+5. ANGLES (10 topics x 5 angles = 50 variations -> 5 topics with up to 3 angles
+   each). The pasted source used 10 angles; Harshitha chose 5 (config/angles.txt).
+   Each variation is scored on in-topic evidence, the angle's weekly average, a
+   brand-fit check, and Playbook history when it exists.
 6. 80/20 MIX. About 70-80% of picks come from Playbook/data; 20-30% are
    deliberate experiments outside past data, to avoid an echo chamber.
 7. HUMAN DECISION. AI surfaces and ranks. Harshitha makes the final topic and
@@ -79,3 +81,5 @@ logged to it after she publishes.
 - Harvest frequency (daily recommended)
 - Final keyword list (draft of 30 to be reviewed)
 - Reddit data-access route (later platform)
+- "Radical triad system": Harshitha's term for the 100 -> 10 filter. Not a term the build
+  recognises; ask what the three parts are. Until then the 100 -> 10 cut uses the topic score.

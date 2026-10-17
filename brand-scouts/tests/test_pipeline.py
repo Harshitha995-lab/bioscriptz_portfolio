@@ -45,12 +45,12 @@ class LabellingTests(unittest.TestCase):
         self.assertEqual(labelled, [])
         self.assertIn("api down", stats["errors"][0])
 
-    def test_invalid_angle_and_cta_fall_back(self):
+    def test_invalid_angle_is_other_not_guessed(self):
         class Odd:
             def complete_json(self, system, user):
                 return {"labels": [{"id": "1", "relevant": True, "topic": "  trust   matters. ", "angle": "??", "cta_type": "??"}]}
         labelled, _ = label_reels([Reel(id="1", url="u", account="a")], Odd())
-        self.assertEqual((labelled[0].topic, labelled[0].angle, labelled[0].cta_type), ("Trust matters", "authority", "none"))
+        self.assertEqual((labelled[0].topic, labelled[0].angle, labelled[0].cta_type), ("Trust matters", "other", "none"))
 
     def test_normalize_and_group_case_insensitive(self):
         self.assertEqual(normalize_topic("  hello   world. "), "Hello world")

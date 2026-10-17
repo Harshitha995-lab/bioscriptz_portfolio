@@ -8,23 +8,24 @@ from dataclasses import dataclass, field
 from .common import Reel
 from .llm import LLM
 
-ANGLES = ["story", "contrarian", "proof", "how-to", "myth-busting", "authority"]
+DEFAULT_ANGLES = ["story", "contrarian", "proof", "how-to", "authority"]
 CTA_TYPES = ["comment-keyword", "dm", "link", "follow", "none"]
 
-LABEL_SYSTEM = (
-    "[TASK:label]\n"
-    "You label Instagram Reels for a personal-branding research tool.\n"
-    "For each Reel return: relevant (bool), topic, angle, cta_type, hook.\n"
-    "- relevant: true only if the Reel teaches or argues something about personal branding, "
-    "founder-led content, building an audience, or turning content into leads or sales. "
-    "Ads for design or branding services, giveaways and unrelated lifestyle content are not relevant.\n"
-    "- topic: a short noun phrase (3-8 words). If the Reel fits a name in known_topics, reuse that "
-    "exact name so topic names stay stable week to week.\n"
-    f"- angle: one of {ANGLES}.\n"
-    f"- cta_type: one of {CTA_TYPES}.\n"
-    "- hook: the exact opening line, quoted from the transcript or caption.\n"
-    'Return {"labels": [{"id": ..., "relevant": ..., "topic": ..., "angle": ..., "cta_type": ..., "hook": ...}]}.'
-)
+def build_label_system(angles: list[str]) -> str:
+    return (
+        "[TASK:label]\n"
+        "You label Instagram Reels for a personal-branding research tool.\n"
+        "For each Reel return: relevant (bool), topic, angle, cta_type, hook.\n"
+        "- relevant: true only if the Reel teaches or argues something about personal branding, "
+        "founder-led content, building an audience, or turning content into leads or sales. "
+        "Ads for design or branding services, giveaways and unrelated lifestyle content are not relevant.\n"
+        "- topic: a short noun phrase (3-8 words). If the Reel fits a name in known_topics, reuse that "
+        "exact name so topic names stay stable week to week.\n"
+        f"- angle: one of {angles}.\n"
+        f"- cta_type: one of {CTA_TYPES}.\n"
+        "- hook: the exact opening line, quoted from the transcript or caption.\n"
+        'Return {"labels": [{"id": ..., "relevant": ..., "topic": ..., "angle": ..., "cta_type": ..., "hook": ...}]}.'
+    )
 
 
 @dataclass
@@ -70,7 +71,9 @@ def normalize_topic(name: str) -> str:
     return name[:1].upper() + name[1:] if name else ""
 
 
-def label_reels(reels: list[Reel], llm: LLM, known_topics=(), batch_size: int = 20) -> tuple[list[Reel], dict]:
+def label_reels(reels: list[Reel], llm: LLM, known_topics=(), batch_size: int = 20, angles=None) -> tuple[list[Reel], dict]:
+    angles = list(angles or DEFAULT_ANGLES)
+    system = build_label_system(angles)
     stats = {"input": len(reels), "labelled": 0, "irrelevant": 0, "unlabelled": 0, "errors": []}
     labelled: list[Reel] = []
     for i in range(0, len(reels), batch_size):
@@ -84,7 +87,7 @@ def label_reels(reels: list[Reel], llm: LLM, known_topics=(), batch_size: int = 
             }
         )
         try:
-            resp = llm.complete_json(LABEL_SYSTEM, user)
+            resp = llm.complete_json(system, user)
         except Exception as exc:  # one bad batch must not lose the whole run; reported in stats
             stats["errors"].append(f"batch {i // batch_size}: {exc}")
             stats["unlabelled"] += len(batch)
@@ -100,7 +103,7 @@ def label_reels(reels: list[Reel], llm: LLM, known_topics=(), batch_size: int = 
                 stats["irrelevant"] += 1
                 continue
             r.topic = topic
-            r.angle = lab.get("angle") if lab.get("angle") in ANGLES else "authority"
+            r.angle = lab.get("angle") if lab.get("angle") in angles else "other"  # unknown angles are not guessed
             r.cta_type = lab.get("cta_type") if lab.get("cta_type") in CTA_TYPES else "none"
             r.hook = str(lab.get("hook", ""))[:300]
             labelled.append(r)
