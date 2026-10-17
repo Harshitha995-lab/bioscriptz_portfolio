@@ -104,3 +104,11 @@ def score_topics(topics: list[Topic], weights: dict | None = None) -> list[Topic
     for t in topics:
         t.score, t.weights_used = combine(weights, t.factors)
     return sorted(topics, key=lambda t: t.score, reverse=True)
+
+
+def cap_topics(topics: list[Topic], max_topics: int | None) -> list[Topic]:
+    """Keep the strongest max_topics (by viral evidence and breadth) before the per-topic model calls.
+    Needs compute_factors to have run."""
+    if max_topics and len(topics) > max_topics:
+        topics = sorted(topics, key=lambda t: -(0.6 * t.factors["viral_evidence"] + 0.4 * t.factors["breadth"]))[:max_topics]
+    return topics

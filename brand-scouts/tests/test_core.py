@@ -104,5 +104,74 @@ class TriageTests(unittest.TestCase):
         self.assertEqual(len(kept), 1)
 
 
+class MedianTests(unittest.TestCase):
+    def acct(self, account, plays_list):
+        return [Reel(id=f"{account}{i}", url="u", account=account, plays=p, followers=10000, posted_at=NOW - timedelta(days=2))
+                for i, p in enumerate(plays_list)]
+
+    def test_median_needs_enough_reels_and_known_account(self):
+        from scouts.triage import fill_account_medians
+        rs = self.acct("a", [100, 200, 300, 400, 500]) + self.acct("b", [1, 2, 3, 4]) + self.acct("unknown", [9, 9, 9, 9, 9])
+        fill_account_medians(rs, 5)
+        medians = {r.account: r.account_median_plays for r in rs}
+        self.assertEqual(medians, {"a": 300.0, "b": None, "unknown": None})
+
+    def test_existing_median_not_overwritten(self):
+        from scouts.triage import fill_account_medians
+        rs = self.acct("a", [1, 2, 3, 4, 5])
+        rs[0].account_median_plays = 999.0
+        fill_account_medians(rs, 5)
+        self.assertEqual(rs[0].account_median_plays, 999.0)
+
+    def test_median_uses_reels_that_later_fail_the_play_filter(self):
+        # 4 ordinary Reels (1,000 plays each, below min_plays) and one hit. If the ordinary ones were
+        # filtered out first, the "usual" would be the hit itself and the hit would look average.
+        rs = self.acct("a", [1000, 1000, 1000, 1000, 60000])
+        kept, _ = triage(rs, TriageConfig(min_plays=5000, min_heat=0, min_outperformance=3.0), NOW)
+        self.assertEqual(len(kept), 1)
+        self.assertAlmostEqual(kept[0].outperformance, 60.0)
+
+
+class ViralBarTests(unittest.TestCase):
+    def pool(self, n=100):
+        return [reel(i, plays=10000 + 1000 * i, followers=2000) for i in range(n)]
+
+    def test_min_heat_keeps_roughly_the_top_slice(self):
+        kept, stats = triage(self.pool(100), TriageConfig(min_plays=0, min_heat=80, min_outperformance=0), NOW)
+        self.assertEqual(stats["after_relevance"], 100)
+        self.assertTrue(18 <= len(kept) <= 22, len(kept))
+        self.assertTrue(all(r.heat >= 80 for r in kept))
+
+    def test_min_outperformance_removes_big_account_average_posts(self):
+        big = [reel(i, plays=50000, followers=1_000_000) for i in range(30)]       # 0.05x their follower count
+        small = [reel(100 + i, plays=50000 + i, followers=5000) for i in range(30)]  # 10x
+        kept, _ = triage(big + small, TriageConfig(min_plays=0, min_heat=0, min_outperformance=3.0), NOW)
+        self.assertEqual(len(kept), 30)
+        self.assertTrue(all(int(r.id) >= 100 for r in kept))
+
+    def test_warning_when_too_few_survive(self):
+        _, stats = triage(self.pool(10), TriageConfig(min_plays=0, min_heat=0, warn_below=20), NOW)
+        self.assertIn("Only 10 Reels", stats["warning"])
+        _, stats = triage(self.pool(30), TriageConfig(min_plays=0, min_heat=0, warn_below=20), NOW)
+        self.assertNotIn("warning", stats)
+
+    def test_thousand_reels_with_the_real_settings(self):
+        import random, time
+        from scouts.common import ROOT, load_json
+        rnd = random.Random(1)
+        reels = [Reel(id=str(i), url=f"u{i}", account=f"a{i % 150}", caption="founder brand content",
+                      plays=int(rnd.lognormvariate(10, 1.2)), likes=500, comments=20,
+                      followers=rnd.choice([3000, 12000, 50000, 200000]),
+                      posted_at=NOW - timedelta(days=rnd.uniform(0.5, 13))) for i in range(1000)]
+        cfg = TriageConfig.from_dict(load_json(ROOT / "config" / "settings.json")["triage"])
+        t0 = time.time()
+        kept, stats = triage(reels, cfg, NOW)
+        self.assertLess(time.time() - t0, 5)
+        self.assertEqual(stats["input"], 1000)
+        self.assertLessEqual(len(kept), 0.25 * stats["after_relevance"])   # a strict bar, not most of the pool
+        self.assertGreater(len(kept), 0)
+        self.assertTrue(all(r.heat >= cfg.min_heat and r.outperformance >= cfg.min_outperformance for r in kept))
+
+
 if __name__ == "__main__":
     unittest.main()

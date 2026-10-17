@@ -4,7 +4,9 @@
     "Two candidates seen in a web search, neither tested here: api-empire/instagram-reels-scraper (hashtag and keyword search) and sones/instagram-reels-scraper-lowcost (adds transcripts). Check price and recent reviews first.",
     "Placeholders {hashtags} and {terms} are filled from config/keywords.txt (lines starting with # are hashtags).",
     "The real spending guard is the monthly usage limit on your Apify account. Set one before the first live run.",
-    "On the first live run, open out/<week>/raw_sample.json and check the field names; add any that differ under field_map."
+    "On the first live run, open out/<week>/raw_sample.json and check the field names; add any that differ under field_map.",
+    "profile_actor_id: an Apify actor that returns recent Reels for given usernames (it can be the same actor if it supports profiles). Used only when config/creators.txt has accounts.",
+    "Placeholder {usernames} in profile_input_template is filled from config/creators.txt."
   ],
   "actor_id": "REPLACE_ME",
   "input_template": {
@@ -12,5 +14,10 @@
     "searchTerms": "{terms}",
     "resultsLimit": 30
   },
-  "field_map": {}
+  "field_map": {},
+  "profile_actor_id": "REPLACE_ME",
+  "profile_input_template": {
+    "usernames": "{usernames}",
+    "resultsLimit": 12
+  }
 }

@@ -26,7 +26,11 @@
       "post",
       "build in public",
       "thought leader"
-    ]
+    ],
+    "min_heat": 80,
+    "min_outperformance": 3.0,
+    "min_reels_for_median": 5,
+    "warn_below": 20
   },
   "scoring": {
     "top_n": 10,
@@ -37,10 +41,11 @@
       "conversion": 15,
       "brand_match": 15,
       "history": 10
-    }
+    },
+    "max_topics": 100
   },
   "harvest": {
-    "max_reels": 800
+    "max_reels": 1000
   },
   "shortlist": {
     "expand_top": 10,

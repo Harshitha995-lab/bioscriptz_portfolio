@@ -17,7 +17,7 @@ from scouts.angles import expand_angles, load_angles, shortlist
 from scouts.common import ROOT, Reel, load_env, load_json, read_lines, utcnow
 from scouts.playbook import EmptyPlaybook
 from scouts.report import render_shortlist, write_outputs
-from scouts.scoring import compute_factors, score_brand_match, score_topics
+from scouts.scoring import cap_topics, compute_factors, score_brand_match, score_topics
 from scouts.topics import group_topics, label_reels
 from scouts.triage import TriageConfig, triage
 
@@ -67,7 +67,10 @@ def main(argv=None) -> int:
 
         llm = AnthropicLLM()
         cap = args.max_reels or settings["harvest"].get("max_reels")
-        reels, hstats = harvest(read_lines(ROOT / "config" / "keywords.txt"), load_json(ROOT / "config" / "apify.json"), os.environ["APIFY_TOKEN"], cap)
+        creators_file = ROOT / "config" / "creators.txt"
+        creators = read_lines(creators_file) if creators_file.exists() else []
+        reels, hstats = harvest(read_lines(ROOT / "config" / "keywords.txt"), load_json(ROOT / "config" / "apify.json"),
+                                os.environ["APIFY_TOKEN"], cap, creators)
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "raw_sample.json").write_text(json.dumps(hstats.pop("raw_sample"), indent=2, default=str), encoding="utf-8")
         stats["harvest"] = hstats
@@ -75,7 +78,13 @@ def main(argv=None) -> int:
             print("Harvest returned no usable Reels. Check raw_sample.json and the field mapping.", file=sys.stderr)
             return 3
 
-    kept, stats["triage"] = triage(reels, TriageConfig.from_dict(settings["triage"]), now)
+    tcfg = TriageConfig.from_dict(settings["triage"])
+    if args.sample:  # the sample pool is tiny, so a strict viral bar would leave almost nothing
+        tcfg.min_heat, tcfg.min_outperformance = 0.0, 0.0
+        stats["note"] = "viral bar switched off in sample mode"
+    kept, stats["triage"] = triage(reels, tcfg, now)
+    if stats["triage"].get("warning"):
+        print("WARNING:", stats["triage"]["warning"], file=sys.stderr)
     labelled, stats["labelling"] = label_reels(kept, llm, known_topics, angles=list(angles))
     if not labelled:
         print(f"No Reels were labelled. Errors: {stats['labelling']['errors'] or 'none'}", file=sys.stderr)
@@ -84,6 +93,8 @@ def main(argv=None) -> int:
     topics = group_topics(labelled)
     prev = load_json(STATE) if STATE.exists() else {}
     compute_factors(topics, prev, EmptyPlaybook())
+    stats["topics_found"] = len(topics)
+    topics = cap_topics(topics, settings["scoring"].get("max_topics"))
     score_brand_match(topics, llm, brief)
     ranked = score_topics(topics, settings["scoring"]["weights"])
     stats["topics"] = len(ranked)

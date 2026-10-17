@@ -26,19 +26,35 @@ Sample mode uses made-up Reels and a simple rule-based stand-in for the language
 4. Pick an Instagram Reels scraper in the Apify Store, then fill in `config/apify.json`
    (`actor_id`, and `input_template` to match that actor's input fields).
 5. Review `config/keywords.txt` (draft list) and `config/brand_brief.md` (draft brief).
-6. First run small: `python3 run_weekly.py --live --max-reels 50`, then open
+6. Optional: add creators. Put their Instagram handles in `config/creators.txt` and set
+   `profile_actor_id` (and `profile_input_template`) in `config/apify.json`. Their recent Reels are
+   fetched first, and with 5+ Reels per account the agent learns each account's "usual" level, so
+   virality is measured against that account's own normal. Leave the file empty to skip.
+7. First run small: `python3 run_weekly.py --live --max-reels 50`, then open
    `out/week_<date>/raw_sample.json` and check the field names against `field_map`.
-7. `--save-state` remembers this week's topics so next week can score momentum.
+8. `--save-state` remembers this week's topics so next week can score momentum.
 
 ## What is tested, and what is not
 
-Tested (53 unit tests, standard library only): triage filters, metric maths, dedupe, topic
+Tested (64 unit tests, standard library only): triage filters, metric maths, dedupe, topic
 labelling and grouping, score combination and missing-data handling, field mapping for several
 Apify field-name styles, and the Apify/Anthropic glue code against stand-in modules.
 
 **Not yet tested against the real services.** No live Apify run and no live Anthropic call has
 happened. The actor's real input and output field names, its cost, and the quality of the
 model's topic labels all need a first small live run.
+
+## Scale: about 1,000 Reels, a strict viral bar, up to 100 topics
+
+`python3 run_weekly.py --live --max-reels 1000` (the default cap in `config/settings.json`).
+After cleaning, only Reels that clear **both** parts of the viral bar continue:
+`min_heat` 80 (top ~20% of this pool) and `min_outperformance` 3.0 (at least 3x the account's usual,
+or 3x its follower count when the usual is unknown). Topics are capped at `max_topics` 100.
+
+On a *synthetic* pool of 1,000 random Reels the default bar kept about 115. That shows how strict it
+is, not what Instagram will give. Fewer than 20 survivors prints a warning. 115 Reels would group
+into well under 100 topics, so getting close to 100 topics means scraping more Reels or loosening the
+bar; thin topics (one Reel or one account) are flagged in the report instead of hidden.
 
 ## The angle step
 

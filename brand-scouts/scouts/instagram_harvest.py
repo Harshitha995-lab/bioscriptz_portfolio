@@ -98,28 +98,65 @@ def render_template(obj, subs: dict):
     return obj
 
 
-def harvest(keyword_lines: list[str], cfg: dict, token: str, max_reels: int | None = None) -> tuple[list[Reel], dict]:
-    if cfg.get("actor_id", "REPLACE_ME") == "REPLACE_ME":
-        raise RuntimeError("Set actor_id in config/apify.json before a live run (see its _notes).")
-    from apify_client import ApifyClient  # lazy import: only needed for live runs
-
-    hashtags, terms = split_keywords(keyword_lines)
-    run_input = render_template(cfg.get("input_template", {}), {"{hashtags}": hashtags, "{terms}": terms})
-    client = ApifyClient(token)
-    run = client.actor(cfg["actor_id"]).call(run_input=run_input)
+def _run_actor(client, actor_id: str, run_input: dict, field_map, source: str, limit: int | None):
+    run = client.actor(actor_id).call(run_input=run_input)
     if not run:
-        raise RuntimeError("Apify run returned nothing; check the run in the Apify console.")
-
+        raise RuntimeError(f"Apify run for {actor_id} returned nothing; check the run in the Apify console.")
     reels, raw_sample, items, skipped = [], [], 0, 0
     for item in client.dataset(run["defaultDatasetId"]).iterate_items():
         items += 1
         if len(raw_sample) < 3:
             raw_sample.append(item)
-        reel = item_to_reel(item, cfg.get("field_map"), source="apify")
+        reel = item_to_reel(item, field_map, source=source)
         if reel is None:
             skipped += 1
             continue
         reels.append(reel)
-        if max_reels and len(reels) >= max_reels:
+        if limit and len(reels) >= limit:
             break
     return reels, {"items": items, "skipped": skipped, "raw_sample": raw_sample}
+
+
+def clean_handles(lines: list[str]) -> list[str]:
+    return [l.strip().lstrip("@") for l in lines if l.strip()]
+
+
+def harvest(keyword_lines: list[str], cfg: dict, token: str, max_reels: int | None = None,
+            creators: list[str] | None = None) -> tuple[list[Reel], dict]:
+    """Creators' recent Reels first (they also give each account a 'usual' level to compare against),
+    then keyword/hashtag Reels fill the rest of max_reels."""
+    if cfg.get("actor_id", "REPLACE_ME") == "REPLACE_ME":
+        raise RuntimeError("Set actor_id in config/apify.json before a live run (see its _notes).")
+    handles = clean_handles(creators or [])
+    if handles and cfg.get("profile_actor_id", "REPLACE_ME") == "REPLACE_ME":
+        raise RuntimeError("config/creators.txt lists accounts, but profile_actor_id is not set in "
+                           "config/apify.json. Set it, or leave creators.txt empty.")
+    from apify_client import ApifyClient  # lazy import: only needed for live runs
+
+    client = ApifyClient(token)
+    field_map = cfg.get("field_map")
+    reels: list[Reel] = []
+    info: dict = {"creator_accounts": len(handles), "items": 0, "skipped": 0}
+    raw_sample: list = []
+
+    if handles:
+        run_input = render_template(cfg.get("profile_input_template", {}), {"{usernames}": handles})
+        got, meta = _run_actor(client, cfg["profile_actor_id"], run_input, field_map, "creator", max_reels)
+        reels += got
+        raw_sample += meta.pop("raw_sample")
+        info["creators"] = meta
+        info["items"] += meta["items"]
+        info["skipped"] += meta["skipped"]
+
+    remaining = None if not max_reels else max(max_reels - len(reels), 0)
+    if remaining != 0:
+        hashtags, terms = split_keywords(keyword_lines)
+        run_input = render_template(cfg.get("input_template", {}), {"{hashtags}": hashtags, "{terms}": terms})
+        got, meta = _run_actor(client, cfg["actor_id"], run_input, field_map, "keyword", remaining)
+        reels += got
+        raw_sample += meta.pop("raw_sample")
+        info["keywords"] = meta
+        info["items"] += meta["items"]
+        info["skipped"] += meta["skipped"]
+    info["raw_sample"] = raw_sample
+    return reels, info

@@ -24,10 +24,11 @@ biotech-trained, mechanism-first, storytelling. Avoid: job-seeker branding tips,
 generic listicles, hustle hype, vanity metrics.
 
 ## Pipeline (Instagram first)
-1. HARVEST (daily). Reels from many keywords and hashtags (start with 20-30,
+1. HARVEST (daily). Target about 1,000 Reels per run: creators' recent Reels first, then keywords. Reels from many keywords and hashtags (start with 20-30,
    including Hinglish/Hindi terms) plus a small seed list of accounts.
    Creators are one source, not the unit of analysis.
-2. TRIAGE. Drop duplicates, spam, off-topic. Compute velocity (plays/day),
+2. TRIAGE. Drop duplicates, spam, off-topic. Work out each account's usual level (median plays) from all
+   its fetched Reels BEFORE filtering. Apply the strict viral bar (min_heat, min_outperformance). Compute velocity (plays/day),
    outperformance (vs account size and median), comment-to-like ratio.
    Keep outliers only.
 3. TOPICS. The Breakdown Analyst reads transcript + caption of each surviving

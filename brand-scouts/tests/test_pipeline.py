@@ -7,7 +7,7 @@ from scouts.common import Reel
 from scouts.fake_llm import FakeLLM
 from scouts.llm import parse_json
 from scouts.playbook import EmptyPlaybook
-from scouts.scoring import DEFAULT_WEIGHTS, combine, compute_factors, momentum_score, score_brand_match, score_topics
+from scouts.scoring import DEFAULT_WEIGHTS, cap_topics, combine, compute_factors, momentum_score, score_brand_match, score_topics
 from scouts.topics import Topic, group_topics, label_reels, normalize_topic
 from scouts.triage import TriageConfig, triage
 
@@ -99,6 +99,17 @@ class ScoringTests(unittest.TestCase):
         score_brand_match([t], Broken(), "brief")
         self.assertIsNone(t.factors["brand_match"])
         self.assertIn("failed", t.notes[0])
+
+    def test_cap_topics_keeps_the_strongest(self):
+        topics = []
+        for i in range(6):
+            t = Topic(f"T{i}", [Reel(id=str(i), url="u", account="a")])
+            t.factors = {"viral_evidence": i * 10.0, "breadth": i * 10.0}
+            topics.append(t)
+        kept = cap_topics(topics, 3)
+        self.assertEqual(sorted(t.name for t in kept), ["T3", "T4", "T5"])
+        self.assertEqual(len(cap_topics(topics, 100)), 6)
+        self.assertEqual(len(cap_topics(topics, None)), 6)
 
     def test_empty_playbook_gives_none(self):
         self.assertIsNone(EmptyPlaybook().history_score("anything"))
