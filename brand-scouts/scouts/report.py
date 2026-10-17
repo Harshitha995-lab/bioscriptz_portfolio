@@ -186,3 +186,106 @@ def render_viral_analysis(va, topics: list, reels_by_id: dict, date: str, sample
                 lines.append(f"- Shares features linked to reach in this topic: {'; '.join(standouts)}")
             lines.append("")
     return "\n".join(lines)
+
+
+def _n(x: int) -> str:
+    return f"{x:,}"
+
+
+def render_library(res, date: str, sample: bool) -> str:
+    from .viral_analysis import describe_feature
+
+    sel, tr, fu = res.selection, res.transcripts, res.followups
+    lines = [f"# Viral Reel library: week of {date}", ""]
+    if sample:
+        lines += ["> **SAMPLE RUN.** Synthetic Reels, rule-based text analysis, no video frames. This shows the format of the report, "
+                  "not anything real about Instagram.", ""]
+    lines += [
+        f"**{sel['selected']} viral Reels** (asked for {sel['requested']}) covering {sel['keywords_covered']} of {sel['keywords_available']} keywords, "
+        f"at most {sel['per_keyword_cap']} per keyword and {sel['per_account_cap']} per creator, so no keyword or creator fills the list.",
+    ]
+    if sel["selected"] < sel["requested"]:
+        lines.append(f"> Fewer than {sel['requested']} Reels were available after the viral bar and the caps. Reaching {sel['requested']} at "
+                     f"{sel['per_keyword_cap']} per keyword needs at least {sel['min_keywords_needed']} keywords that each produced enough viral Reels. "
+                     "Scrape more keywords, or raise per_keyword_cap, or loosen the viral bar in config/settings.json.")
+    if tr:
+        lines.append(f"**Transcripts:** {tr.get('already_had', 0)} came with the scrape, {tr.get('transcribed', 0)} transcribed from the video, "
+                     f"{tr.get('failed', 0) + tr.get('skipped', 0)} missing." + (f" ({tr['reason']})" if tr.get("reason") else ""))
+    lines.append(f"**Earlier versions:** looked for each creator's weaker take on the same topic: {fu.get('fetched', 0)} other Reels checked, "
+                 f"{fu.get('matched', 0)} on a matching topic, {len(res.twins)} winner/earlier-version pairs found." + (f" Problem: {fu['error']}" if fu.get("error") else ""))
+    lines += ["", "**How to read this.** Every Reel was described *without the analyst seeing its view count*. Where the same creator also made a weaker "
+              "version of the same topic, the two are compared directly; that is the strongest evidence here. Everywhere else it is description only. "
+              "Views also depend on timing, sound, the algorithm and luck, which this cannot see.", ""]
+
+    lines += ["## When a creator re-made a topic and the new version won", ""]
+    if res.patterns:
+        plural = lambda k: f"{k} pair" + ("" if k == 1 else "s")
+        lines += [f"Changes that kept showing up in the same direction ({res.selection['pairs_in_statistics']} pairs, one per creator):", "",
+                  "| What the winner did | Added in | Dropped in | Read |", "|---|---|---|---|"]
+        for p in res.patterns[:12]:
+            lines.append(f"| {describe_feature(p.feature)} | {plural(p.added)} | {plural(p.dropped)} | {p.read} |")
+        lines += ["", "Rows overlap (for example “story loop: none” dropped and “myth-bust” added can be the same change counted twice), so read the top "
+                  "one or two as a single story, not as many separate findings.", ""]
+    else:
+        n = res.selection.get("pairs_in_statistics", 0)
+        lines += [f"{n} usable pair(s), one per creator, so far. No change repeated in the same direction often enough to report. "
+                  "With a sign test, a pattern needs roughly 6 pairs all changing the same way before it can beat chance, so more weeks of data are needed. "
+                  "Read the individual pairs below as examples, not as proof.", ""]
+
+    if res.prevalence:
+        lines += ["## What the viral Reels have in common (descriptive only)", "",
+                  "How common each feature is among these winners. Common among winners does **not** mean it causes winning; "
+                  "only the pair comparisons above and the topic comparisons in viral_analysis.md compare against non-viral Reels.", "",
+                  "| Feature | Share of viral Reels | Reels judged |", "|---|---|---|"]
+        for k, yes, n_ in res.prevalence:
+            lines.append(f"| {describe_feature(k)} | {yes / n_:.0%} | {n_} |")
+        lines.append("")
+
+    twin_by_winner = {t["pair"].winner.id: t for t in res.twins}
+    lines += ["## The Reels", ""]
+    for rank, r in enumerate(res.reels, start=1):
+        bd = res.breakdowns.get(r.id)
+        lines.append(f"### {rank}. [@{r.account}]({r.url})" + (f": “{r.keyword}”" if r.keyword else "") + f" · topic: {r.topic}")
+        lines.append(f"{_n(r.plays)} plays · {_n(r.likes)} likes · {_n(r.comments)} comments · {r.reach_ratio:.1f}× its follower count")
+        twin = twin_by_winner.get(r.id)
+        if twin:
+            p = twin["pair"]
+            when = {True: "posted earlier", False: "posted later", None: ""}[p.baseline_came_first]
+            lines.append(f"**Same creator, same topic, earlier version:** [{_n(p.baseline.plays)} plays]({p.baseline.url}) {when}. "
+                         f"This one got **{p.ratio:,.0f}×** as many.")
+        lines.append("")
+        if bd is None or bd.error:
+            lines += [f"Breakdown unavailable: {bd.error if bd else 'not analysed'}", ""]
+            continue
+        lines.append(f"- **Hooks:** {_hook_line(bd)}")
+        loop = bd.loop
+        lines.append(f"- **Format / style:** {bd.format} · tone {bd.style.get('tone')} · pacing {bd.style.get('pacing')}")
+        lines.append(f"- **Storytelling loop:** {loop['type']}" + (f". Opens: “{loop['open_loop']}”" if loop.get("open_loop") else "")
+                     + (f". Pays off: “{loop['payoff']}”" if loop.get("payoff") else "") + (f". Re-hook: “{loop['re_hook']}”" if loop.get("re_hook") else ""))
+        lines.append(f"- **Structure:** " + " → ".join(b["beat"] for b in bd.structure))
+        lines.append(f"- **Spice:** {', '.join(bd.spice) or 'none'} · **CTA:** {bd.cta['type']}" + (f" (“{bd.cta['text']}”)" if bd.cta.get("text") else ""))
+        if twin:
+            if twin["added"] or twin["dropped"]:
+                lines.append("- **What changed from the earlier version:** "
+                             + ("added " + "; ".join(describe_feature(x) for x in twin["added"]) if twin["added"] else "")
+                             + (" · " if twin["added"] and twin["dropped"] else "")
+                             + ("dropped " + "; ".join(describe_feature(x) for x in twin["dropped"]) if twin["dropped"] else ""))
+            ex = twin["explanation"]
+            if ex.get("what_changed"):
+                lines.append(f"- **Why it may have gone further:** {ex['what_changed']}")
+            if ex.get("worth_testing"):
+                lines.append("- **Worth testing:** " + "; ".join(describe_feature(x) for x in ex["worth_testing"]))
+            for c in ex.get("caveats", []):
+                lines.append(f"- Caveat: {c}")
+            if twin["note"]:
+                lines.append(f"- {twin['note']}")
+            if ex.get("template"):
+                lines += ["", f"> **Template to adapt (fill the [brackets] from your own experience):** {ex['template']}"]
+        else:
+            lines.append("- *No weaker version of this topic by the same creator was found, so nothing here shows what made it travel. Description only.*")
+        lines.append("")
+        if r.transcript:
+            lines += ["<details><summary>Full transcript</summary>", "", r.transcript, "", "</details>", ""]
+        else:
+            lines += ["*Transcript not available: the scraper gave none and it could not be transcribed.*", ""]
+    return "\n".join(lines)

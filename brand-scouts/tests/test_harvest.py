@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from scouts.instagram_harvest import item_to_reel, render_template, split_keywords, to_int
@@ -130,6 +131,29 @@ class LiveGlueTests(unittest.TestCase):
         from scouts.instagram_harvest import harvest
         with self.assertRaises(RuntimeError):
             harvest(["x"], {"actor_id": "REPLACE_ME"}, "T")
+
+    def test_one_run_per_keyword_tags_every_reel(self):
+        from scouts.instagram_harvest import harvest
+        cfg = {**self.CFG, "per_keyword_runs": True}
+        reels, info = harvest(["#a", "b c", "#d"], cfg, "T")
+        inputs = sorted((json.dumps(i, sort_keys=True) for a, i in self.calls["runs"]))
+        self.assertEqual(len(inputs), 3)
+        self.assertEqual({r.keyword for r in reels}, {"a", "b c", "d"})
+        self.assertEqual(sum(r.keyword == "a" for r in reels), 3)           # the 3 usable stand-in items from that run
+        self.assertEqual(info["keywords"]["runs"], 3)
+        one_hashtag = [i for a, i in self.calls["runs"] if i["hashtags"] == ["a"]]
+        self.assertEqual(one_hashtag[0]["searchTerms"], [])
+        capped, _ = harvest(["#a", "b c", "#d"], cfg, "T", max_reels=5)
+        self.assertEqual(len(capped), 5)
+
+    def test_profile_followups(self):
+        from scouts.instagram_harvest import harvest_profiles
+        reels, meta = harvest_profiles(["@jo", "mo"], self.CFG, "T", per_account=7)
+        self.assertEqual(self.calls["runs"][0], ("profile/actor", {"usernames": ["jo", "mo"], "resultsLimit": 7}))
+        self.assertEqual([r.source for r in reels], ["followup", "followup"])
+        self.assertEqual(harvest_profiles([], self.CFG, "T"), ([], {"items": 0, "skipped": 0}))
+        with self.assertRaises(RuntimeError):
+            harvest_profiles(["jo"], {**self.CFG, "profile_actor_id": "REPLACE_ME"}, "T")
 
     def test_anthropic_wrapper_request_and_parse(self):
         import types

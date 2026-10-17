@@ -31,6 +31,11 @@ class FakeLLM:
             return {"angles": [self._angle(data["topic"], a["name"]) for a in data["angles"]]}
         if "[TASK:breakdown]" in system:
             return self._breakdown(data["reel"], bool(images))
+        if "[TASK:explain_pair]" in system:
+            ch = data["winner_added"]
+            return {"what_changed": f"[sample] The winning version added: {', '.join(ch) or 'nothing we can see'}.",
+                    "worth_testing": ch[:3], "template": "[sample] Audio hook: [...] / On-screen text: [...] / CTA: [...]",
+                    "caveats": ["Sample data; rule-based text, not a real analysis.", "One pair cannot prove cause."]}
         if "[TASK:explain]" in system:
             return self._explain(data)
         raise ValueError("unknown task")

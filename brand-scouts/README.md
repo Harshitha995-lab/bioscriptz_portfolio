@@ -36,7 +36,7 @@ Sample mode uses made-up Reels and a simple rule-based stand-in for the language
 
 ## What is tested, and what is not
 
-Tested (99 unit tests, standard library only): triage filters, metric maths, dedupe, topic
+Tested (129 unit tests, standard library only): triage filters, metric maths, dedupe, topic
 labelling and grouping, score combination and missing-data handling, field mapping for several
 Apify field-name styles, and the Apify/Anthropic glue code against stand-in modules.
 
@@ -55,6 +55,32 @@ On a *synthetic* pool of 1,000 random Reels the default bar kept about 115. That
 is, not what Instagram will give. Fewer than 20 survivors prints a warning. 115 Reels would group
 into well under 100 topics, so getting close to 100 topics means scraping more Reels or loosening the
 bar; thin topics (one Reel or one account) are flagged in the report instead of hidden.
+
+## The viral Reel library: 100 winners across different keywords
+
+`out/week_<date>/viral_reels.md` (and `.json`). One entry per viral Reel, with its **full transcript**, its
+hooks, format, storytelling loop, spice and CTA, and, where possible, a direct comparison with the same
+creator's earlier weaker version of the same topic.
+
+- **Scale and spread.** `harvest.max_reels` (default 3,000) with `per_keyword_runs: true` in `config/apify.json`
+  runs the scraper once per keyword so every Reel knows which keyword found it. The library then takes the best
+  Reels round-robin across keywords: at most `per_keyword_cap` (5) per keyword and `per_account_cap` (2) per
+  creator. For 100 Reels at 5 per keyword you need at least 20 keywords that each produced enough viral Reels;
+  the report says so when it falls short. Set `resultsLimit` in `input_template` to the Reels wanted per keyword.
+- **Twins: your 42K vs 6.1M example.** For each winner, the agent fetches that creator's recent Reels, labels them
+  against the winner's topic, and takes the nearest miss that got at least `twin_min_ratio` (10x) fewer plays as
+  its "earlier version". Both are described blind to their numbers and the presentation features that changed are
+  listed. This is the strongest evidence in the system because audience, voice and topic are held constant.
+  Across many pairs, a sign test (one pair per creator, corrected for many features) reports changes that repeat.
+  **About six pairs all changing the same way are needed before it can beat chance**, so early weeks will say
+  "not enough pairs" rather than guess. One pair is an example, not proof: timing, sound and the algorithm also
+  move reach.
+- **Transcripts.** Used as scraped. When missing and a video URL exists, the video is downloaded to a temporary
+  folder, its audio is extracted with ffmpeg and transcribed with faster-whisper (`pip install faster-whisper`;
+  downloads a model on first use; CPU, can be slow). Nothing is kept except the text. Transcripts are stored in
+  your own `out/` folder for study; do not republish other creators' words.
+- **Not verified live:** the transcription engine (faster-whisper is not installed in the test environment),
+  the follow-up profile scrape, and whether your chosen actors return video URLs and keywords.
 
 ## Viral analysis: why one Reel on a topic travelled further than another
 

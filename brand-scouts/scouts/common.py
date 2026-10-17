@@ -46,6 +46,7 @@ class Reel:
     comments: int = 0
     posted_at: Optional[datetime] = None
     source: str = ""
+    keyword: str = ""              # the search term or hashtag that found this Reel
     account_median_plays: Optional[float] = None
     video_url: str = ""            # direct video file, for frame extraction (Apify links can expire)
     duration_s: Optional[float] = None

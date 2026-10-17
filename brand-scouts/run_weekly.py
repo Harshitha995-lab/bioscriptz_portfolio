@@ -14,9 +14,10 @@ from datetime import timedelta
 from pathlib import Path
 
 from scouts.angles import expand_angles, load_angles, shortlist
+from scouts.library import run_library
 from scouts.common import ROOT, Reel, load_env, load_json, read_lines, utcnow
 from scouts.playbook import EmptyPlaybook
-from scouts.report import render_shortlist, render_viral_analysis, write_outputs
+from scouts.report import render_library, render_shortlist, render_viral_analysis, write_outputs
 from scouts.scoring import cap_topics, compute_factors, score_brand_match, score_topics
 from scouts.topics import group_topics, label_reels
 from scouts.viral_analysis import analyse_topics, load_vocab, spread
@@ -30,8 +31,24 @@ def load_sample(now) -> list[Reel]:
     for d in load_json(ROOT / "data" / "sample_reels.json"):
         d = dict(d)
         d["posted_at"] = now - timedelta(days=d.pop("posted_days_ago"))
+        d["keyword"] = d.get("source", "").lstrip("#")
         reels.append(Reel.from_dict(d))
     return reels
+
+
+def sample_followups_loader(now):
+    data = load_json(ROOT / "data" / "sample_followups.json")
+
+    def load(accounts):
+        wanted = {a.lower() for a in accounts}
+        out = []
+        for d in data:
+            if d["account"].lower() in wanted:
+                d = dict(d)
+                d["posted_at"] = now - timedelta(days=d.pop("posted_days_ago"))
+                out.append(Reel.from_dict(d))
+        return out
+    return load
 
 
 def main(argv=None) -> int:
@@ -52,12 +69,14 @@ def main(argv=None) -> int:
     brief = (ROOT / "config" / "brand_brief.md").read_text(encoding="utf-8")
     known_topics = read_lines(ROOT / "config" / "topics.txt")
     angles = load_angles(ROOT / "config" / "angles.txt")
+    followups_loader, transcriber = None, None
     stats: dict = {"mode": "sample" if args.sample else "live", "date": date}
 
     if args.sample:
         from scouts.fake_llm import FakeLLM
 
         llm, reels = FakeLLM(), load_sample(now)
+        followups_loader = sample_followups_loader(now)
     else:
         missing = [k for k in ("APIFY_TOKEN", "ANTHROPIC_API_KEY") if not os.environ.get(k)]
         if missing:
@@ -70,8 +89,13 @@ def main(argv=None) -> int:
         cap = args.max_reels or settings["harvest"].get("max_reels")
         creators_file = ROOT / "config" / "creators.txt"
         creators = read_lines(creators_file) if creators_file.exists() else []
-        reels, hstats = harvest(read_lines(ROOT / "config" / "keywords.txt"), load_json(ROOT / "config" / "apify.json"),
-                                os.environ["APIFY_TOKEN"], cap, creators)
+        apify_cfg, token = load_json(ROOT / "config" / "apify.json"), os.environ["APIFY_TOKEN"]
+        reels, hstats = harvest(read_lines(ROOT / "config" / "keywords.txt"), apify_cfg, token, cap, creators)
+        from scouts.instagram_harvest import harvest_profiles
+        per = settings.get("viral_library", {}).get("followup_per_account")
+        followups_loader = lambda accounts: harvest_profiles(accounts, apify_cfg, token, per)[0]
+        from scouts.transcribe import FasterWhisperTranscriber, LazyTranscriber
+        transcriber = LazyTranscriber(FasterWhisperTranscriber)
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "raw_sample.json").write_text(json.dumps(hstats.pop("raw_sample"), indent=2, default=str), encoding="utf-8")
         stats["harvest"] = hstats
@@ -107,7 +131,7 @@ def main(argv=None) -> int:
     stats["angle_ideas"] = len(ideas)
     stats["shortlist"] = {"topics": len(picks), "experiments": sum(p.slot == "experiment" for p in picks), "notes": notes}
 
-    va, peers_all = None, []
+    va, peers_all, frames = None, [], None
     vcfg = settings.get("viral_analysis", {})
     if vcfg.get("enabled", True) and top:
         # Same-topic Reels that did NOT go viral: the comparison group. Label them against the top topics' names.
@@ -130,6 +154,15 @@ def main(argv=None) -> int:
                             min_group=vcfg["min_group"], min_gap=vcfg["min_gap"])
         stats["viral_analysis"] = va.coverage
 
+    lib, lcfg = None, settings.get("viral_library", {})
+    if lcfg.get("enabled", True) and labelled:
+        if not args.sample and frames is None and vcfg.get("frames", True):
+            from scouts.frames import FfmpegFrames, ffmpeg_available
+            frames = FfmpegFrames() if ffmpeg_available() else None
+        lib = run_library(labelled, peers_all, llm, load_vocab(), brief, list(angles), lcfg, followups_loader=followups_loader,
+                          transcriber=transcriber, frames=frames, breakdowns=(va.breakdowns if va else None))
+        stats["viral_library"] = {"reels": len(lib.reels), **lib.selection, "twin_pairs": len(lib.twins), "followups": lib.followups, "transcripts": lib.transcripts}
+
     write_outputs(out_dir, date, labelled, ranked, stats, settings["scoring"]["weights"], settings["scoring"]["top_n"], args.sample)
     (out_dir / "angles.json").write_text(json.dumps([i.to_dict() for i in ideas], indent=2), encoding="utf-8")
     (out_dir / "shortlist.json").write_text(json.dumps([p.to_dict() for p in picks], indent=2), encoding="utf-8")
@@ -140,12 +173,21 @@ def main(argv=None) -> int:
             "pooled": {"basis": va.pooled_basis, "n": va.pooled_n, "contrasts": [c.to_dict() for c in va.pooled]},
             "topics": [t.to_dict() for t in va.topics],
             "breakdowns": {k: v.to_dict() for k, v in va.breakdowns.items()}}, indent=2, default=str), encoding="utf-8")
+    if lib:
+        (out_dir / "viral_reels.md").write_text(render_library(lib, date, args.sample), encoding="utf-8")
+        (out_dir / "viral_reels.json").write_text(json.dumps({
+            "selection": lib.selection, "followups": lib.followups, "transcripts": lib.transcripts,
+            "patterns": [p.to_dict() for p in lib.patterns],
+            "reels": [{**r.to_dict(), "breakdown": lib.breakdowns[r.id].to_dict() if r.id in lib.breakdowns else None} for r in lib.reels],
+            "twins": [{"winner": t["pair"].winner.id, "earlier_version": t["pair"].baseline.id, "ratio": round(t["pair"].ratio, 1),
+                       "added": t["added"], "dropped": t["dropped"], "explanation": t["explanation"], "note": t["note"]} for t in lib.twins]},
+            indent=2, default=str), encoding="utf-8")
     (out_dir / "shortlist.md").write_text(render_shortlist(picks, notes, date, args.sample, sl["experiment_slots"]), encoding="utf-8")
     if args.save_state:
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps({t.name: t.total_plays for t in ranked}, indent=2), encoding="utf-8")
     print(json.dumps(stats, indent=2, default=str))
-    print(f"\nWrote {out_dir}/shortlist.md, viral_analysis.md and top10.md")
+    print(f"\nWrote {out_dir}/shortlist.md, viral_analysis.md, viral_reels.md and top10.md")
     return 0
 
 

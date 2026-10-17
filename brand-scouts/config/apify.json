@@ -6,7 +6,9 @@
     "The real spending guard is the monthly usage limit on your Apify account. Set one before the first live run.",
     "On the first live run, open out/<week>/raw_sample.json and check the field names; add any that differ under field_map.",
     "profile_actor_id: an Apify actor that returns recent Reels for given usernames (it can be the same actor if it supports profiles). Used only when config/creators.txt has accounts.",
-    "Placeholder {usernames} in profile_input_template is filled from config/creators.txt."
+    "Placeholder {usernames} in profile_input_template is filled from config/creators.txt.",
+    "per_keyword_runs: true runs the actor once per keyword so every Reel is tagged with the keyword that found it (needed to spread the library across keywords). Set resultsLimit in input_template to the number of Reels you want PER keyword.",
+    "For the transcript and the video hook the actor should return a direct video URL (videoUrl) and, if it can, a transcript; otherwise transcripts are made from the video with ffmpeg + faster-whisper."
   ],
   "actor_id": "REPLACE_ME",
   "input_template": {
@@ -19,5 +21,7 @@
   "profile_input_template": {
     "usernames": "{usernames}",
     "resultsLimit": 12
-  }
+  },
+  "per_keyword_runs": true,
+  "parallel_runs": 4
 }

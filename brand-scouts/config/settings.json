@@ -45,7 +45,7 @@
     "max_topics": 100
   },
   "harvest": {
-    "max_reels": 1000
+    "max_reels": 3000
   },
   "shortlist": {
     "expand_top": 10,
@@ -62,5 +62,18 @@
     "frames": true,
     "min_group": 3,
     "min_gap": 0.25
+  },
+  "viral_library": {
+    "enabled": true,
+    "n": 100,
+    "per_keyword_cap": 5,
+    "per_account_cap": 2,
+    "transcribe_missing": true,
+    "max_transcriptions": 150,
+    "twin_search": true,
+    "twin_min_ratio": 10,
+    "twin_min_baseline_plays": 1000,
+    "followup_per_account": 15,
+    "min_pairs_for_pattern": 3
   }
 }

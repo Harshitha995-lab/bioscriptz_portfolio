@@ -6,6 +6,8 @@ config). On a first live run, check out/<week>/raw_sample.json against the mappi
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 from .common import Reel, parse_datetime
 
 FIELD_CANDIDATES = {
@@ -18,6 +20,7 @@ FIELD_CANDIDATES = {
     "plays": ["videoPlayCount", "playsCount", "playCount", "viewCount", "videoViewCount", "views"],
     "likes": ["likesCount", "likeCount", "likes"],
     "comments": ["commentsCount", "commentCount", "comments"],
+    "keyword": ["searchTerm", "hashtag", "query"],
     "video": ["videoUrl", "video_url", "videoUrlHd", "videoPlayUrl"],
     "duration": ["videoDuration", "duration", "videoDurationSeconds"],
     "posted": ["timestamp", "takenAt", "taken_at", "postedAt", "date", "createdAt"],
@@ -79,6 +82,7 @@ def item_to_reel(item: dict, field_map: dict | None = None, source: str = "") ->
         likes=to_int(first(item, fm["likes"])),
         comments=to_int(first(item, fm["comments"])),
         posted_at=parse_datetime(first(item, fm["posted"])),
+        keyword=str(first(item, fm["keyword"]) or ""),
         video_url=str(first(item, fm["video"]) or ""),
         duration_s=to_float(first(item, fm["duration"])),
         source=source,
@@ -110,7 +114,7 @@ def render_template(obj, subs: dict):
     return obj
 
 
-def _run_actor(client, actor_id: str, run_input: dict, field_map, source: str, limit: int | None):
+def _run_actor(client, actor_id: str, run_input: dict, field_map, source: str, limit: int | None, keyword: str = ""):
     run = client.actor(actor_id).call(run_input=run_input)
     if not run:
         raise RuntimeError(f"Apify run for {actor_id} returned nothing; check the run in the Apify console.")
@@ -123,6 +127,8 @@ def _run_actor(client, actor_id: str, run_input: dict, field_map, source: str, l
         if reel is None:
             skipped += 1
             continue
+        if keyword:
+            reel.keyword = keyword   # we know it because this run searched for exactly one keyword
         reels.append(reel)
         if limit and len(reels) >= limit:
             break
@@ -163,12 +169,51 @@ def harvest(keyword_lines: list[str], cfg: dict, token: str, max_reels: int | No
     remaining = None if not max_reels else max(max_reels - len(reels), 0)
     if remaining != 0:
         hashtags, terms = split_keywords(keyword_lines)
-        run_input = render_template(cfg.get("input_template", {}), {"{hashtags}": hashtags, "{terms}": terms})
-        got, meta = _run_actor(client, cfg["actor_id"], run_input, field_map, "keyword", remaining)
-        reels += got
-        raw_sample += meta.pop("raw_sample")
+        if cfg.get("per_keyword_runs"):
+            # One actor run per keyword, so every Reel is tagged with the keyword that found it. This is what
+            # lets the library spread across different keywords. More runs, same cost per result.
+            jobs = [("#" + h, [h], []) for h in hashtags] + [(t, [], [t]) for t in terms]
+
+            def one(job):
+                label, hs_, ts_ = job
+                run_input = render_template(cfg.get("input_template", {}), {"{hashtags}": hs_, "{terms}": ts_})
+                return _run_actor(client, cfg["actor_id"], run_input, field_map, "keyword", None, keyword=label.lstrip("#"))
+
+            with ThreadPoolExecutor(max_workers=cfg.get("parallel_runs", 4)) as pool:
+                outcomes = list(pool.map(one, jobs))
+            meta = {"items": 0, "skipped": 0, "runs": len(jobs)}
+            for got, m in outcomes:
+                reels += got
+                raw_sample += m["raw_sample"][:1]
+                meta["items"] += m["items"]
+                meta["skipped"] += m["skipped"]
+            if max_reels:
+                reels = reels[:max_reels]   # creators come first, so they are never the ones cut
+        else:
+            run_input = render_template(cfg.get("input_template", {}), {"{hashtags}": hashtags, "{terms}": terms})
+            got, meta = _run_actor(client, cfg["actor_id"], run_input, field_map, "keyword", remaining)
+            reels += got
+            raw_sample += meta.pop("raw_sample")
         info["keywords"] = meta
         info["items"] += meta["items"]
         info["skipped"] += meta["skipped"]
     info["raw_sample"] = raw_sample
     return reels, info
+
+
+def harvest_profiles(usernames: list[str], cfg: dict, token: str, per_account: int | None = None) -> tuple[list[Reel], dict]:
+    """Recent Reels of specific accounts. Used to look for a winner's earlier versions of the same topic."""
+    handles = clean_handles(usernames)
+    if not handles:
+        return [], {"items": 0, "skipped": 0}
+    if cfg.get("profile_actor_id", "REPLACE_ME") == "REPLACE_ME":
+        raise RuntimeError("profile_actor_id is not set in config/apify.json, so followers' earlier Reels cannot be fetched.")
+    from apify_client import ApifyClient
+
+    template = dict(cfg.get("profile_input_template", {}))
+    if per_account and "resultsLimit" in template:
+        template["resultsLimit"] = per_account
+    run_input = render_template(template, {"{usernames}": handles})
+    reels, meta = _run_actor(ApifyClient(token), cfg["profile_actor_id"], run_input, cfg.get("field_map"), "followup", None)
+    meta.pop("raw_sample", None)
+    return reels, meta

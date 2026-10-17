@@ -1,6 +1,6 @@
 # Brand Scouts: Build Spec (v0.1)
 
-Status: Instagram steps 1-6 are implemented (harvest, triage, topic labelling, scoring, angle testing,
+Status: Instagram steps 1-6 plus the viral analysis and the viral Reel library are implemented (harvest, triage, topic labelling, scoring, angle testing,
 shortlist with the experiment slot) and unit tested offline; not yet run against live Apify/Anthropic.
 Step 7 is Harshitha's decision. The Playbook and other platforms are not built.
 See README.md.
@@ -71,6 +71,12 @@ Build now: a PlaybookProvider interface that returns "no data" when empty, so
 steps 4-5 run today and start using real history the moment it exists.
 Every weekly run appends winners to it; Harshitha's own posts and results are
 logged to it after she publishes.
+
+## Viral Reel library (implemented)
+Target: ~100 viral Reels from thousands scraped, spread across keywords (per-keyword and per-creator caps).
+Each gets its full transcript, a blind breakdown (hooks, format, loop, spice, CTA) and, where the same creator
+has an earlier weaker Reel on the same topic (>= 10x fewer plays), a direct feature comparison. Patterns across
+pairs use one pair per creator and a sign test with multiple-testing correction. See README.md.
 
 ## Rules
 - Every score shows its factor breakdown and evidence links.
