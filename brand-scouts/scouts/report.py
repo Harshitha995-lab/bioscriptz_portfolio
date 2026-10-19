@@ -289,3 +289,84 @@ def render_library(res, date: str, sample: bool) -> str:
         else:
             lines += ["*Transcript not available: the scraper gave none and it could not be transcribed.*", ""]
     return "\n".join(lines)
+
+
+def render_watchlist(rows, table: dict, date: str, sample: bool, k: float, history_runs: int) -> str:
+    lines = [f"# Watchlist: week of {date}", ""]
+    if sample:
+        lines += ["> **SAMPLE RUN.** Synthetic accounts and numbers. The format is real; the content is not.", ""]
+    lines += [f"Each creator's **usual** is the median plays of their most recent Reels we have seen"
+              f"{' (history from ' + str(history_runs) + ' earlier run(s) is included)' if history_runs else ' (this is the first run, so it uses only what was fetched today)'}. "
+              f"A Reel is an outlier when it beats that usual by {k:g}× or more. A creator with fewer than 5 Reels seen has no usual yet, "
+              "so nothing is flagged for them.", "", "## Creators", "",
+              "| Creator | Reels seen | Usual plays | Outliers | Best outlier |", "|---|---|---|---|---|"]
+    for h, t in sorted(table.items(), key=lambda kv: -(kv[1]["best_ratio"] or 0)):
+        usual = f"{t['baseline']:,.0f}" if t["baseline"] else "not enough Reels yet"
+        best = f"{t['best_ratio']:.0f}×" if t["best_ratio"] else "none"
+        lines.append(f"| @{h} | {t['reels_seen']} | {usual} | {t['outliers']} | {best} |")
+    lines += ["", "## Outlier feed", ""]
+    if not rows:
+        lines.append("No watched Reel beat its creator's usual by enough this week.")
+    for w in rows:
+        r = w.reel
+        grow = f" · growing about {w.growth_per_day:,.0f} plays/day since last run" if w.growth_per_day else ""
+        lines.append(f"- **{w.ratio:.0f}×** [@{r.account}]({r.url}): {r.plays:,} plays against a usual of {w.baseline:,.0f}{grow}")
+    return "\n".join(lines)
+
+
+def render_frameworks(board, date: str, sample: bool) -> str:
+    lines = [f"# Storytelling frameworks, rated by this week's evidence: {date}", ""]
+    if sample:
+        lines += ["> **SAMPLE RUN.** Synthetic data. The ratings show the format only.", ""]
+    lines += ["A framework is only as good as the evidence for it. **supported** = winners use it more than non-winners on the same topics "
+              "(or creators added it when a re-make won), after correcting for luck. **suggestive** = a pattern, but it could be chance. "
+              "**thin** = too little data. **mixed** = two kinds of evidence disagree. **common-to-both** = non-winners use it just as often, "
+              "so it is not what makes Reels win. **not-favoured** = creators tended to drop it when they won.", "",
+              "| Framework | Evidence | Winners using it | Viral vs non-viral | Why |", "|---|---|---|---|---|"]
+    for e in board:
+        vs = f"{e.viral_yes}/{e.viral_n} vs {e.peer_yes}/{e.peer_n}" if e.peer_n else "no comparison"
+        lines.append(f"| {e.fw['name']} | **{e.level}** | {e.n_library}/{e.library_total} | {vs} | {'; '.join(e.reasons)} |")
+    return "\n".join(lines)
+
+
+def render_script(res, date: str, sample: bool, cfg: dict) -> str:
+    from .scriptwriter import CHECKS
+
+    s, ev = res.script, res.evidence
+    failing = {i.code for i in s.issues if i.severity == "error"}
+    badge = {"ready": "✅ Ready to film", "needs_work": f"⚠️ Needs work: {len(failing)} unresolved check(s)", "failed": "❌ Could not be written"}[s.status]
+    lines = [f"# {s.title or 'Script'}", "", f"**{badge}**" + (f" · {s.error}" if s.error else ""), ""]
+    if sample:
+        lines += ["> **SAMPLE RUN.** Placeholder text from a rule-based stand-in. The structure is real; the words are not.", ""]
+    lines += [f"- **Topic:** {s.topic} · **Angle:** {s.angle}",
+              (f"- **Framework:** {ev.fw['name']} (evidence: {ev.level}). " + "; ".join(ev.reasons)) if ev else "- **Framework:** none",
+              f"- **Length:** about {s.est_seconds(cfg['words_per_second']):.0f} seconds spoken (target {cfg['target_seconds']}) · written in {s.rounds} round(s)",
+              f"- **Slot:** {'experiment' if res.slot == 'experiment' else 'data-backed'}", ""]
+    if ev and ev.level not in ("supported", "suggestive"):
+        lines += [f"> The evidence for this framework is **{ev.level}**, so treat this script as a test, not a proven format.", ""]
+    if s.error:
+        return "\n".join(lines)
+    lines += ["## The first 3 seconds", "", "| | |", "|---|---|", f"| **Say** | {s.hooks.get('audio', '')} |",
+              f"| **On-screen text** | {s.hooks.get('text', '')} |", f"| **Show** | {s.hooks.get('video', '')} |", ""]
+    if s.hook_variants:
+        lines += ["**Hooks to A/B test:**", ""]
+        for i, v in enumerate(s.hook_variants, 1):
+            lines.append(f"{i}. Say “{v['audio']}” · text “{v['text']}” · show {v['video']}" + (f" ({v['why']})" if v.get("why") else ""))
+        lines.append("")
+    lines += ["## Shot by shot", "", "| Time | Beat | Say | On-screen text | Show | Sound |", "|---|---|---|---|---|---|"]
+    for b in s.beats:
+        t = f"{b['start_s']:g}–{b['end_s']:g}s" if b["start_s"] is not None and b["end_s"] is not None else ""
+        lines.append(f"| {t} | {b['beat']} | {b['spoken']} | {b['on_screen_text']} | {b['visual']} | {b['audio']} |")
+    lines += ["", "## Caption and call to action", "", s.caption, "", " ".join(s.hashtags), "", f"**CTA ({s.cta.get('type', '')}):** {s.cta.get('text', '')}", ""]
+    if s.needs_from_you:
+        lines += ["## You need to supply", ""] + [f"- {x}" for x in s.needs_from_you] + [""]
+    lines += ["## Checks", ""]
+    for code, label in CHECKS:
+        lines.append(f"- {'❌' if code in failing else '✅'} {label}")
+    for i in s.issues:
+        lines.append(f"  - {'**Fix:**' if i.severity == 'error' else 'Note:'} {i.message}")
+    if res.references:
+        lines += ["", "## Built from (structure only)", "",
+                  "The writer was told how these winners were built, not what they said. Study them; do not copy them.", ""]
+        lines += [f"- [@{r.account}]({r.url}), {r.plays:,} plays" for r in res.references]
+    return "\n".join(lines)

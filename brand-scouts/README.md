@@ -36,7 +36,7 @@ Sample mode uses made-up Reels and a simple rule-based stand-in for the language
 
 ## What is tested, and what is not
 
-Tested (129 unit tests, standard library only): triage filters, metric maths, dedupe, topic
+Tested (173 unit tests, standard library only): triage filters, metric maths, dedupe, topic
 labelling and grouping, score combination and missing-data handling, field mapping for several
 Apify field-name styles, and the Apify/Anthropic glue code against stand-in modules.
 
@@ -55,6 +55,37 @@ On a *synthetic* pool of 1,000 random Reels the default bar kept about 115. That
 is, not what Instagram will give. Fewer than 20 survivors prints a warning. 115 Reels would group
 into well under 100 topics, so getting close to 100 topics means scraping more Reels or loosening the
 bar; thin topics (one Reel or one account) are flagged in the report instead of hidden.
+
+## Watchlist, evidence-rated frameworks and production-ready scripts
+
+Three more outputs in `out/week_<date>/`: `watchlist.md`, `frameworks.md` and `scripts/`.
+
+**Watchlist** (`config/creators.txt`, one handle per line). Each run saves the numbers of every watched Reel to
+`data/state/watchlist.jsonl` (with `--save-state`). From that history each creator gets a "usual" (median plays of their
+most recent Reels, needing at least 5 Reels seen), and any recent Reel that beats it by `watchlist.outlier_k` (3x) is listed
+in an outlier feed, with how fast it grew since the last run. History only ever grows, so baselines improve week by week.
+
+**Frameworks** (`config/frameworks.json`, editable). Seven named story shapes (myth-bust, numbered list, curiosity gap,
+problem-solution, before-after, confession-lesson, mystery-reveal). Each week every framework is rated by the data:
+*supported* (winners use it more than non-winners on the same topics, after correcting for luck, or creators added it in enough
+winning re-makes), *suggestive*, *thin*, *mixed* (two kinds of evidence disagree), *common-to-both* (non-winners use it as
+often, so it does not set winners apart) or *not-favoured*. Evidence beats angle fit when a framework is chosen; no framework is
+used more than `scripts.max_per_framework` times a week; the experiment slot takes an untested framework on purpose.
+
+**Scripts.** For each shortlisted topic: a shot-by-shot script (time, spoken line, on-screen text, what to film, sound), the
+three hooks (audio, on-screen text, video) plus alternatives to A/B test, caption, CTA, and a list of what only you can supply.
+Put true stories and results in `config/my_material.md`; scripts may state only facts from there or from `brand_brief.md`,
+and use `[bracketed placeholders]` for everything else.
+The writer is shown how winners were built (hook type, loop, beats), **never their words**. Then code checks the draft and
+sends failures back to the model for up to `scripts.max_rounds` rounds. A script is called *ready* only if it passes:
+runtime fits the target; audio hook fits 3 seconds; short on-screen hook; a video hook; starts with the hook and ends with the
+CTA; follows the framework's beats; has a CTA; **no figure that is not in your brief or material**; **no client story or
+personal result without a source**; **no run of 6+ words shared with any winning Reel**. Otherwise it says *needs work* and
+lists what is wrong.
+
+What the checks cannot do: tell you whether a script is good, funny, true to you or likely to perform. They catch invented
+numbers, unsourced claims, verbatim copying and an unfilmable structure; paraphrased copying and weak writing are not caught.
+Read every script, and treat a script from a "thin" framework as a test, not a proven format.
 
 ## The viral Reel library: 100 winners across different keywords
 

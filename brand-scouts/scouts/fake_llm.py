@@ -31,6 +31,8 @@ class FakeLLM:
             return {"angles": [self._angle(data["topic"], a["name"]) for a in data["angles"]]}
         if "[TASK:breakdown]" in system:
             return self._breakdown(data["reel"], bool(images))
+        if "[TASK:script]" in system:
+            return self._script(data)
         if "[TASK:explain_pair]" in system:
             ch = data["winner_added"]
             return {"what_changed": f"[sample] The winning version added: {', '.join(ch) or 'nothing we can see'}.",
@@ -91,6 +93,27 @@ class FakeLLM:
                 "what_to_copy": [c["feature"] for c in usable if c["gap"] > 0][:3], "what_not_to_copy": [c["feature"] for c in usable if c["gap"] < 0][:3],
                 "template": "[sample] Audio hook: [your opening line] / On-screen text: [...] / Visual: [...] / Beats: [...] / CTA: [...]",
                 "caveats": ["Sample data; rule-based text, not a real analysis."]}
+
+    def _script(self, data: dict) -> dict:
+        """Placeholder script that satisfies the structural checks. Sample mode only: it says nothing real."""
+        c, fw, topic = data["constraints"], data["framework"], data["topic"]
+        beats, budget = fw["beats"], int(c["target_seconds"] * c["words_per_second"])
+        per = max(budget // len(beats), 6)
+        out, t = [], 0.0
+        for i, beat in enumerate(beats):
+            words = (["[sample", "hook", "line", "for", "this", "topic]"] if i == 0 else
+                     ([f"[sample {beat} beat about {topic}]"] + [f"filler{j}" for j in range(per - 6)]))
+            spoken = " ".join(words)
+            dur = per / c["words_per_second"]
+            out.append({"beat": beat, "start_s": round(t, 1), "end_s": round(t + dur, 1), "spoken": spoken,
+                        "on_screen_text": f"[sample {beat} text]", "visual": f"[sample shot for the {beat} beat]", "audio": ""})
+            t += dur
+        return {"title": f"[sample] {topic}", "hooks": {"audio": "[sample hook line for this topic]", "text": "[sample on-screen hook]",
+                                                         "video": "[sample] face to camera, close up"},
+                "hook_variants": [{"audio": "[sample variant]", "text": "[sample]", "video": "[sample]", "why": "[sample]"}],
+                "beats": out, "caption": "[sample caption]", "hashtags": ["#personalbranding"],
+                "cta": {"type": "comment-keyword", "text": "[Comment YOUR KEYWORD and I will send it]"},
+                "needs_from_you": ["[your lead magnet name]"]}
 
     def _label(self, reel: dict) -> dict:
         text = f"{reel['caption']}\n{reel['transcript']}"

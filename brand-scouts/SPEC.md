@@ -78,6 +78,12 @@ Each gets its full transcript, a blind breakdown (hooks, format, loop, spice, CT
 has an earlier weaker Reel on the same topic (>= 10x fewer plays), a direct feature comparison. Patterns across
 pairs use one pair per creator and a sign test with multiple-testing correction. See README.md.
 
+## Watchlist, frameworks, scripts (implemented)
+Persistent watchlist snapshots with per-creator baselines and an outlier feed. Seven editable storytelling frameworks rated
+by evidence each week (supported / suggestive / thin / mixed / common-to-both / not-favoured). Scripts are drafted by a model
+that sees structure but not winners' words, then checked in code (runtime, three hooks, framework beats, CTA, no unsourced
+figures, no unsourced personal claims, no copied runs of words) with up to 3 repair rounds. See README.md.
+
 ## Rules
 - Every score shows its factor breakdown and evidence links.
 - Scrape public data only; no scraping through Harshitha's own logged-in

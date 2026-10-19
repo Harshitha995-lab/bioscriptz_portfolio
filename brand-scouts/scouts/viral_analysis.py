@@ -339,6 +339,7 @@ class ViralAnalysis:
     pooled_n: tuple
     pooled: list
     coverage: dict
+    pooled_ids: tuple = ((), ())      # (viral ids, comparison ids) behind `pooled`
 
 
 def spread(items: list, k: int) -> list:
@@ -410,7 +411,8 @@ def analyse_topics(topics: list[Topic], llm: LLM, vocab: dict, brief: str, frame
                 "audio_hook_analysed": count("audio"), "text_hook_analysed": count("text"), "video_hook_analysed": count("video"),
                 "unverified_audio_quotes": sum(1 for bd in ok.values() if bd.hooks["audio"]["analysed"] and not bd.hooks["audio"]["verified_quote"]),
                 "errors": [bd.error for bd in breakdowns.values() if bd.error][:5]}
-    return ViralAnalysis(breakdowns, features, results, pool_basis, (len(pool_v), len(pool_r)), pooled, coverage)
+    return ViralAnalysis(breakdowns, features, results, pool_basis, (len(pool_v), len(pool_r)), pooled, coverage,
+                         ([r.id for r in pool_v], [r.id for r in pool_r]))
 
 
 def topics_reels(topics: list[Topic]) -> list[Reel]:

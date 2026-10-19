@@ -75,5 +75,21 @@
     "twin_min_baseline_plays": 1000,
     "followup_per_account": 15,
     "min_pairs_for_pattern": 3
+  },
+  "watchlist": {
+    "outlier_k": 3.0,
+    "max_age_days": 30,
+    "min_reels": 5
+  },
+  "scripts": {
+    "enabled": true,
+    "count": 5,
+    "target_seconds": 30,
+    "words_per_second": 2.6,
+    "audio_hook_max_words": 14,
+    "text_hook_max_words": 8,
+    "max_shared_words": 6,
+    "max_rounds": 3,
+    "max_per_framework": 2
   }
 }

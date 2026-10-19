@@ -16,14 +16,19 @@ from pathlib import Path
 from scouts.angles import expand_angles, load_angles, shortlist
 from scouts.library import run_library
 from scouts.common import ROOT, Reel, load_env, load_json, read_lines, utcnow
+from scouts.frameworks import load_frameworks, scoreboard
 from scouts.playbook import EmptyPlaybook
-from scouts.report import render_library, render_shortlist, render_viral_analysis, write_outputs
+from scouts.script_run import generate_scripts
+from scouts.watchlist import append_snapshot, load_history, outlier_feed
+from scouts.report import (render_frameworks, render_library, render_script, render_shortlist, render_viral_analysis,
+                           render_watchlist, write_outputs)
 from scouts.scoring import cap_topics, compute_factors, score_brand_match, score_topics
 from scouts.topics import group_topics, label_reels
 from scouts.viral_analysis import analyse_topics, load_vocab, spread
 from scouts.triage import TriageConfig, triage_split
 
 STATE = ROOT / "data" / "state" / "last_week.json"
+WATCH_STATE = ROOT / "data" / "state" / "watchlist.jsonl"
 
 
 def load_sample(now) -> list[Reel]:
@@ -163,6 +168,44 @@ def main(argv=None) -> int:
                           transcriber=transcriber, frames=frames, breakdowns=(va.breakdowns if va else None))
         stats["viral_library"] = {"reels": len(lib.reels), **lib.selection, "twin_pairs": len(lib.twins), "followups": lib.followups, "transcripts": lib.transcripts}
 
+    # --- competitor watchlist: usual level per creator, and an outlier feed across runs
+    wl_rows = wl_table = None
+    wcfg = settings.get("watchlist", {})
+    creators_file = ROOT / "config" / "creators.txt"
+    handles = [h.lstrip("@") for h in read_lines(creators_file)] if creators_file.exists() else []
+    watch_pool = [r for r in reels if r.source == "creator"]
+    if args.sample and lib:
+        handles = sorted({r.account for r in lib.reels})[:6]
+        watch_pool = [r for r in reels if r.account in handles] + (followups_loader(handles) if followups_loader else [])
+    if handles and watch_pool:
+        history = load_history(WATCH_STATE)
+        wl_rows, wl_table, _ = outlier_feed(watch_pool, history, handles, k=wcfg["outlier_k"], max_age_days=wcfg["max_age_days"],
+                                            min_reels=wcfg["min_reels"], now=now)
+        stats["watchlist"] = {"creators": len(handles), "outliers": len(wl_rows), "earlier_snapshots": len(history)}
+        if args.save_state:
+            append_snapshot(WATCH_STATE, watch_pool, now)
+
+    # --- storytelling frameworks rated by evidence, then scripts
+    board, scripts = [], []
+    scfg = settings.get("scripts", {})
+    if scfg.get("enabled", True) and lib and picks:
+        all_feats = {**(va.features if va else {}), **lib.features}
+        pooled_ok = va and va.pooled_basis.startswith("viral vs")
+        v_ids, p_ids = (va.pooled_ids if pooled_ok else ((), ()))
+        seen_accounts, pair_feats = set(), []
+        for t in sorted(lib.twins, key=lambda t: -t["pair"].ratio):
+            p = t["pair"]
+            if p.account.lower() not in seen_accounts and p.winner.id in all_feats and p.baseline.id in all_feats:
+                seen_accounts.add(p.account.lower())
+                pair_feats.append((all_feats[p.winner.id], all_feats[p.baseline.id]))
+        board = scoreboard(load_frameworks(), [all_feats[r.id] for r in lib.reels if r.id in all_feats],
+                           [all_feats[i] for i in v_ids if i in all_feats], [all_feats[i] for i in p_ids if i in all_feats], pair_feats)
+        material_file = ROOT / "config" / "my_material.md"
+        material = material_file.read_text(encoding="utf-8") if material_file.exists() else ""
+        scripts = generate_scripts(picks, board, lib.reels, lib.breakdowns, all_feats, angles, llm, load_vocab(), brief, material, scfg)
+        stats["scripts"] = {"written": len(scripts), "ready": sum(r.script.status == "ready" for r in scripts),
+                            "needs_work": sum(r.script.status == "needs_work" for r in scripts), "failed": sum(r.script.status == "failed" for r in scripts)}
+
     write_outputs(out_dir, date, labelled, ranked, stats, settings["scoring"]["weights"], settings["scoring"]["top_n"], args.sample)
     (out_dir / "angles.json").write_text(json.dumps([i.to_dict() for i in ideas], indent=2), encoding="utf-8")
     (out_dir / "shortlist.json").write_text(json.dumps([p.to_dict() for p in picks], indent=2), encoding="utf-8")
@@ -182,12 +225,25 @@ def main(argv=None) -> int:
             "twins": [{"winner": t["pair"].winner.id, "earlier_version": t["pair"].baseline.id, "ratio": round(t["pair"].ratio, 1),
                        "added": t["added"], "dropped": t["dropped"], "explanation": t["explanation"], "note": t["note"]} for t in lib.twins]},
             indent=2, default=str), encoding="utf-8")
+    if wl_table is not None:
+        (out_dir / "watchlist.md").write_text(render_watchlist(wl_rows, wl_table, date, args.sample, wcfg["outlier_k"],
+                                                               len({r[0]["seen"] for r in load_history(WATCH_STATE).values()})), encoding="utf-8")
+    if board:
+        (out_dir / "frameworks.md").write_text(render_frameworks(board, date, args.sample), encoding="utf-8")
+        (out_dir / "frameworks.json").write_text(json.dumps([e.to_dict() for e in board], indent=2), encoding="utf-8")
+    if scripts:
+        (out_dir / "scripts").mkdir(exist_ok=True)
+        for n, res in enumerate(scripts, 1):
+            slug = "".join(c if c.isalnum() else "-" for c in res.script.topic.lower()).strip("-")[:40]
+            (out_dir / "scripts" / f"{n:02d}-{slug}.md").write_text(render_script(res, date, args.sample, scfg), encoding="utf-8")
+        (out_dir / "scripts.json").write_text(json.dumps([{**r.script.to_dict(), "framework_evidence": r.evidence.to_dict() if r.evidence else None,
+                                                          "references": [x.url for x in r.references]} for r in scripts], indent=2, default=str), encoding="utf-8")
     (out_dir / "shortlist.md").write_text(render_shortlist(picks, notes, date, args.sample, sl["experiment_slots"]), encoding="utf-8")
     if args.save_state:
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps({t.name: t.total_plays for t in ranked}, indent=2), encoding="utf-8")
     print(json.dumps(stats, indent=2, default=str))
-    print(f"\nWrote {out_dir}/shortlist.md, viral_analysis.md, viral_reels.md and top10.md")
+    print(f"\nWrote {out_dir}/shortlist.md, scripts/, viral_analysis.md, viral_reels.md, watchlist.md, frameworks.md and top10.md")
     return 0
 
 
