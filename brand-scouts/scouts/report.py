@@ -314,19 +314,25 @@ def render_watchlist(rows, table: dict, date: str, sample: bool, k: float, histo
     return "\n".join(lines)
 
 
+FRAMEWORK_LEGEND = ("A framework is only as good as the evidence for it. **supported** = winners use it more than non-winners on the same topics "
+                    "(or creators added it when a re-make won), after correcting for luck. **suggestive** = a pattern, but it could be chance. "
+                    "**thin** = too little data. **mixed** = two kinds of evidence disagree. **common-to-both** = non-winners use it just as often, "
+                    "so it is not what makes Reels win. **not-favoured** = creators tended to drop it when they won.")
+
+
+def framework_table(board) -> list[str]:
+    lines = ["| Framework | Evidence | Winners using it | Viral vs non-viral | Why |", "|---|---|---|---|---|"]
+    for e in board:
+        vs = f"{e.viral_yes}/{e.viral_n} vs {e.peer_yes}/{e.peer_n}" if e.peer_n else "no comparison"
+        lines.append(f"| {e.fw['name']} | **{e.level}** | {e.n_library}/{e.library_total} | {vs} | {'; '.join(e.reasons)} |")
+    return lines
+
+
 def render_frameworks(board, date: str, sample: bool) -> str:
     lines = [f"# Storytelling frameworks, rated by this week's evidence: {date}", ""]
     if sample:
         lines += ["> **SAMPLE RUN.** Synthetic data. The ratings show the format only.", ""]
-    lines += ["A framework is only as good as the evidence for it. **supported** = winners use it more than non-winners on the same topics "
-              "(or creators added it when a re-make won), after correcting for luck. **suggestive** = a pattern, but it could be chance. "
-              "**thin** = too little data. **mixed** = two kinds of evidence disagree. **common-to-both** = non-winners use it just as often, "
-              "so it is not what makes Reels win. **not-favoured** = creators tended to drop it when they won.", "",
-              "| Framework | Evidence | Winners using it | Viral vs non-viral | Why |", "|---|---|---|---|---|"]
-    for e in board:
-        vs = f"{e.viral_yes}/{e.viral_n} vs {e.peer_yes}/{e.peer_n}" if e.peer_n else "no comparison"
-        lines.append(f"| {e.fw['name']} | **{e.level}** | {e.n_library}/{e.library_total} | {vs} | {'; '.join(e.reasons)} |")
-    return "\n".join(lines)
+    return "\n".join(lines + [FRAMEWORK_LEGEND, ""] + framework_table(board))
 
 
 def render_script(res, date: str, sample: bool, cfg: dict) -> str:
@@ -369,4 +375,77 @@ def render_script(res, date: str, sample: bool, cfg: dict) -> str:
         lines += ["", "## Built from (structure only)", "",
                   "The writer was told how these winners were built, not what they said. Study them; do not copy them.", ""]
         lines += [f"- [@{r.account}]({r.url}), {r.plays:,} plays" for r in res.references]
+    return "\n".join(lines)
+
+
+def render_outliers(outliers, stats: dict, *, niche: str | None, days: int, k_usual: float, k_followers: float, date: str) -> str:
+    lines = [f"# Viral outliers{' in ' + niche if niche else ''}: {date}", "",
+             f"{stats['outliers']} outliers ({stats['strong']} strong) from {stats['considered']} Reels posted in the last {days} days, "
+             f"out of {stats['reels_in_vault']} Reels in the vault. {stats['creators_with_a_usual']} creators have enough Reels stored to have a \"usual\".", "",
+             f"**Strong** = beat that creator's own median by {k_usual:g}× or more. **Weak** = we only know the creator's size, so it is plays against "
+             f"followers ({k_followers:g}× or more); a small account can spike for reasons that say nothing about the content, so treat these as leads, not proof. "
+             "Watching more creators (`agent.py niche add-creators`) turns weak outliers into strong ones.", ""]
+    if not outliers:
+        return "\n".join(lines + ["No outliers yet. Harvest more (`agent.py harvest`), watch more creators, or lower the thresholds."])
+    lines += ["| # | Reel | Niche | Keyword | Beat the usual by | Plays | Plays/day | Basis |", "|---|---|---|---|---|---|---|---|"]
+    for i, o in enumerate(outliers, 1):
+        r = o.reel
+        lines.append(f"| {i} | [@{r.account}]({r.url}) | {r.niche or '-'} | {r.keyword or '-'} | **{o.ratio:.0f}×** | {r.plays:,} | {o.velocity:,.0f} | "
+                     f"{'strong: own usual ' + format(o.usual, ',.0f') if o.strong else 'weak: vs followers'} |")
+    return "\n".join(lines)
+
+
+def render_formats(res, date: str, sample: bool, cards: int = 10) -> str:
+    from .viral_analysis import describe_feature
+
+    cov = res.coverage
+    lines = [f"# Winning content formats: {date}", ""]
+    if sample:
+        lines += ["> **SAMPLE RUN.** Synthetic Reels and a rule-based stand-in analyst. Shows the format of the report, not anything real.", ""]
+    lines += [f"Built from **{cov['outliers_analysed']} outliers** and **{cov['ordinary_reels_analysed']} ordinary Reels by the same creators**, "
+              f"compared creator by creator ({cov['creators_compared']} creators, {cov['pooled'][0]} vs {cov['pooled'][1]} Reels). "
+              "The analyst described each Reel *without seeing its view count*; the comparison is computed in code and corrected for testing many features at once.", ""]
+    if cov["with_frames"] == 0:
+        lines.append("> No video frames were available, so on-screen text hooks, visual hooks, format, tone and pacing were **not analysed**. "
+                     "Only the spoken hook, story loop, spice, CTA and structure are covered.")
+    if cov["weak_basis_outliers"]:
+        lines.append(f"> {cov['weak_basis_outliers']} outlier(s) have no creator baseline (weak basis); they are described below but not used in the comparison.")
+    for e in cov["errors"]:
+        lines.append(f"> Error: {e}")
+    lines += ["", "## What separates a creator's outliers from their ordinary Reels", ""]
+    if res.contrasts:
+        lines += ["| Feature | In outliers | In ordinary Reels | Gap | Read |", "|---|---|---|---|---|"]
+        for c in res.contrasts[:12]:
+            lines.append(f"| {describe_feature(c.feature)} | {c.viral_yes}/{c.viral_n} | {c.rest_yes}/{c.rest_n} | {c.gap:+.0%} | {c.read} |")
+        lines += ["", "Rows overlap (one change can show up as several features), so read the top one or two as a single story.", ""]
+    elif cov["creators_compared"] < 3:
+        lines += [f"Only {cov['creators_compared']} creator(s) could be compared. Each needs at least 5 stored Reels (so we know their usual) plus an outlier, "
+                  "and a pattern needs several creators. Watch more creators and harvest again.", ""]
+    else:
+        lines += ["No feature separated outliers from ordinary Reels by enough to report. That is a result, not a failure: with this sample, "
+                  "presentation did not clearly differ.", ""]
+    lines += ["## Storytelling frameworks, rated by this evidence", "", FRAMEWORK_LEGEND, ""] + framework_table(res.board) + [""]
+    if res.prevalence:
+        lines += ["## What the outliers have in common (descriptive only)", "",
+                  "Common among outliers does **not** mean it causes winning. Only the comparison above checks that.", "",
+                  "| Feature | Share of outliers | Reels judged |", "|---|---|---|"]
+        lines += [f"| {describe_feature(k)} | {y / n:.0%} | {n} |" for k, y, n in res.prevalence]
+        lines.append("")
+    lines += ["## The outliers", ""]
+    for rank, o in enumerate(res.outliers[:cards], 1):
+        r, bd = o.reel, res.breakdowns.get(o.reel.id)
+        lines.append(f"### {rank}. [@{r.account}]({r.url})" + (f" · {r.niche}" if r.niche else "") + (f" · “{r.keyword}”" if r.keyword else ""))
+        lines.append(f"{r.plays:,} plays · **{o.ratio:.0f}×** " + (f"its usual of {o.usual:,.0f}" if o.strong else "its follower count (weak basis)"))
+        lines.append("")
+        if bd is None or bd.error:
+            lines += [f"Breakdown unavailable: {bd.error if bd else 'not analysed'}", ""]
+            continue
+        loop = bd.loop
+        lines += [f"- **Hooks:** {_hook_line(bd)}",
+                  f"- **Format / style:** {bd.format} · tone {bd.style.get('tone')} · pacing {bd.style.get('pacing')}",
+                  f"- **Story loop:** {loop['type']}" + (f". Opens: “{loop['open_loop']}”" if loop.get("open_loop") else "") + (f". Pays off: “{loop['payoff']}”" if loop.get("payoff") else ""),
+                  f"- **Structure:** " + " → ".join(b["beat"] for b in bd.structure),
+                  f"- **Spice:** {', '.join(bd.spice) or 'none'} · **CTA:** {bd.cta['type']}", ""]
+        lines += (["<details><summary>Full transcript</summary>", "", r.transcript, "", "</details>", ""] if r.transcript
+                  else ["*Transcript not available: the scraper gave none and it could not be transcribed.*", ""])
     return "\n".join(lines)

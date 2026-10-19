@@ -114,8 +114,22 @@ def render_template(obj, subs: dict):
     return obj
 
 
-def _run_actor(client, actor_id: str, run_input: dict, field_map, source: str, limit: int | None, keyword: str = ""):
-    run = client.actor(actor_id).call(run_input=run_input)
+def _call(actor, run_input: dict, max_charge_usd: float | None):
+    """Start an actor run, asking Apify to stop at max_charge_usd if this client version supports it."""
+    import inspect
+
+    kwargs = {"run_input": run_input}
+    try:
+        if max_charge_usd and "max_total_charge_usd" in inspect.signature(actor.call).parameters:
+            kwargs["max_total_charge_usd"] = max_charge_usd
+    except (TypeError, ValueError):
+        pass
+    return actor.call(**kwargs)
+
+
+def _run_actor(client, actor_id: str, run_input: dict, field_map, source: str, limit: int | None, keyword: str = "",
+               max_charge_usd: float | None = None):
+    run = _call(client.actor(actor_id), run_input, max_charge_usd)
     if not run:
         raise RuntimeError(f"Apify run for {actor_id} returned nothing; check the run in the Apify console.")
     reels, raw_sample, items, skipped = [], [], 0, 0
@@ -132,15 +146,24 @@ def _run_actor(client, actor_id: str, run_input: dict, field_map, source: str, l
         reels.append(reel)
         if limit and len(reels) >= limit:
             break
-    return reels, {"items": items, "skipped": skipped, "raw_sample": raw_sample}
+    usage = run.get("usageTotalUsd")
+    return reels, {"items": items, "skipped": skipped, "raw_sample": raw_sample, "usage_usd": float(usage) if isinstance(usage, (int, float)) else None}
 
 
 def clean_handles(lines: list[str]) -> list[str]:
     return [l.strip().lstrip("@") for l in lines if l.strip()]
 
 
+def _limited(template: dict, limit: int | None) -> dict:
+    t = dict(template)
+    if limit and "resultsLimit" in t:
+        t["resultsLimit"] = limit
+    return t
+
+
 def harvest(keyword_lines: list[str], cfg: dict, token: str, max_reels: int | None = None,
-            creators: list[str] | None = None) -> tuple[list[Reel], dict]:
+            creators: list[str] | None = None, *, per_keyword: int | None = None, per_creator: int | None = None,
+            run_cap_usd: float | None = None) -> tuple[list[Reel], dict]:
     """Creators' recent Reels first (they also give each account a 'usual' level to compare against),
     then keyword/hashtag Reels fill the rest of max_reels."""
     if cfg.get("actor_id", "REPLACE_ME") == "REPLACE_ME":
@@ -158,8 +181,8 @@ def harvest(keyword_lines: list[str], cfg: dict, token: str, max_reels: int | No
     raw_sample: list = []
 
     if handles:
-        run_input = render_template(cfg.get("profile_input_template", {}), {"{usernames}": handles})
-        got, meta = _run_actor(client, cfg["profile_actor_id"], run_input, field_map, "creator", max_reels)
+        run_input = render_template(_limited(cfg.get("profile_input_template", {}), per_creator), {"{usernames}": handles})
+        got, meta = _run_actor(client, cfg["profile_actor_id"], run_input, field_map, "creator", max_reels, max_charge_usd=run_cap_usd)
         reels += got
         raw_sample += meta.pop("raw_sample")
         info["creators"] = meta
@@ -176,27 +199,32 @@ def harvest(keyword_lines: list[str], cfg: dict, token: str, max_reels: int | No
 
             def one(job):
                 label, hs_, ts_ = job
-                run_input = render_template(cfg.get("input_template", {}), {"{hashtags}": hs_, "{terms}": ts_})
-                return _run_actor(client, cfg["actor_id"], run_input, field_map, "keyword", None, keyword=label.lstrip("#"))
+                run_input = render_template(_limited(cfg.get("input_template", {}), per_keyword), {"{hashtags}": hs_, "{terms}": ts_})
+                return _run_actor(client, cfg["actor_id"], run_input, field_map, "keyword", None, keyword=label.lstrip("#"),
+                                  max_charge_usd=run_cap_usd)
 
             with ThreadPoolExecutor(max_workers=cfg.get("parallel_runs", 4)) as pool:
                 outcomes = list(pool.map(one, jobs))
-            meta = {"items": 0, "skipped": 0, "runs": len(jobs)}
+            meta = {"items": 0, "skipped": 0, "runs": len(jobs), "usage_usd": None}
             for got, m in outcomes:
                 reels += got
                 raw_sample += m["raw_sample"][:1]
                 meta["items"] += m["items"]
                 meta["skipped"] += m["skipped"]
+                if m["usage_usd"] is not None:
+                    meta["usage_usd"] = (meta["usage_usd"] or 0.0) + m["usage_usd"]
             if max_reels:
                 reels = reels[:max_reels]   # creators come first, so they are never the ones cut
         else:
-            run_input = render_template(cfg.get("input_template", {}), {"{hashtags}": hashtags, "{terms}": terms})
-            got, meta = _run_actor(client, cfg["actor_id"], run_input, field_map, "keyword", remaining)
+            run_input = render_template(_limited(cfg.get("input_template", {}), per_keyword), {"{hashtags}": hashtags, "{terms}": terms})
+            got, meta = _run_actor(client, cfg["actor_id"], run_input, field_map, "keyword", remaining, max_charge_usd=run_cap_usd)
             reels += got
             raw_sample += meta.pop("raw_sample")
         info["keywords"] = meta
         info["items"] += meta["items"]
         info["skipped"] += meta["skipped"]
+    usages = [info[k]["usage_usd"] for k in ("creators", "keywords") if k in info and info[k].get("usage_usd") is not None]
+    info["usage_usd"] = sum(usages) if usages else None      # None = Apify did not report it; the caller falls back to the estimate
     info["raw_sample"] = raw_sample
     return reels, info
 

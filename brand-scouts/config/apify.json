@@ -8,7 +8,8 @@
     "profile_actor_id: an Apify actor that returns recent Reels for given usernames (it can be the same actor if it supports profiles). Used only when config/creators.txt has accounts.",
     "Placeholder {usernames} in profile_input_template is filled from config/creators.txt.",
     "per_keyword_runs: true runs the actor once per keyword so every Reel is tagged with the keyword that found it (needed to spread the library across keywords). Set resultsLimit in input_template to the number of Reels you want PER keyword.",
-    "For the transcript and the video hook the actor should return a direct video URL (videoUrl) and, if it can, a transcript; otherwise transcripts are made from the video with ffmpeg + faster-whisper."
+    "For the transcript and the video hook the actor should return a direct video URL (videoUrl) and, if it can, a transcript; otherwise transcripts are made from the video with ffmpeg + faster-whisper.",
+    "price_per_1000_results_usd: copy the price from the actor's page (Pricing tab) so `agent.py harvest` can estimate cost and stay inside the free plan. If you use two actors, put the higher price."
   ],
   "actor_id": "REPLACE_ME",
   "input_template": {
@@ -23,5 +24,6 @@
     "resultsLimit": 12
   },
   "per_keyword_runs": true,
-  "parallel_runs": 4
+  "parallel_runs": 4,
+  "price_per_1000_results_usd": null
 }

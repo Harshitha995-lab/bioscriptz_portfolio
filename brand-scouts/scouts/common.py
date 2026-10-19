@@ -47,6 +47,7 @@ class Reel:
     posted_at: Optional[datetime] = None
     source: str = ""
     keyword: str = ""              # the search term or hashtag that found this Reel
+    niche: str = ""                # which watchlist niche it belongs to (from the keyword or the creator)
     account_median_plays: Optional[float] = None
     video_url: str = ""            # direct video file, for frame extraction (Apify links can expire)
     duration_s: Optional[float] = None

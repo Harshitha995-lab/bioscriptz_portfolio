@@ -91,5 +91,20 @@
     "max_shared_words": 6,
     "max_rounds": 3,
     "max_per_framework": 2
+  },
+  "agent": {
+    "outliers": {
+      "days": 30,
+      "k_usual": 3.0,
+      "k_followers": 5.0,
+      "min_plays": 1000,
+      "min_reels_for_usual": 5
+    },
+    "analyse": {
+      "top": 20,
+      "normals_per_creator": 3,
+      "min_group": 3,
+      "min_gap": 0.25
+    }
   }
 }

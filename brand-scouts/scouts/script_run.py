@@ -33,9 +33,31 @@ def choose_references(fw: dict, library: list, features: dict, topic: str, k: in
     return sorted(pool, key=lambda r: (r.topic.lower() != topic.lower(), -r.heat))[:k]
 
 
+def make_context(*, topic: str, angle_name: str, angle_meaning: str, pitch: str, hook: str, ev: Evidence, refs_briefs: list, brief: str,
+                 material: str, has_material: bool, cfg: dict, remix: dict | None = None) -> dict:
+    """The one place a script request is assembled, so weekly scripts and remixes follow identical rules."""
+    ctx = {
+        "brand_brief": brief, "my_material": material if has_material else "(none provided: use [placeholders] for any personal story or result)",
+        "topic": topic,
+        "angle": {"name": angle_name, "meaning": angle_meaning, "pitch": pitch, "suggested_hook": hook},
+        "framework": {"name": ev.fw["name"], "shape": ev.fw["shape"], "beats": ev.fw["beats"], "hook_formula": ev.fw["hook_formula"],
+                      "evidence_level": ev.level, "evidence": ev.reasons},
+        "references": refs_briefs,
+        "constraints": {"target_seconds": cfg["target_seconds"], "words_per_second": cfg["words_per_second"],
+                        "audio_hook_max_words": cfg["audio_hook_max_words"], "text_hook_max_words": cfg["text_hook_max_words"]},
+    }
+    if remix:
+        ctx["remix"] = remix
+    return ctx
+
+
+def has_real_material(material: str) -> bool:
+    return bool(material.strip()) and "(empty for now" not in material
+
+
 def generate_scripts(picks: list, board: list[Evidence], library: list, breakdowns: dict, features: dict, angle_meanings: dict,
                      llm: LLM, vocab: dict, brief: str, material: str, cfg: dict) -> list[ScriptResult]:
-    has_material = bool(material.strip()) and "(empty for now" not in material
+    has_material = has_real_material(material)
     all_transcripts = [r.transcript for r in library if r.transcript]     # copy check runs against every winner, not just the references
     out, used = [], {}
     for pick in picks[: cfg["count"]]:
@@ -47,16 +69,9 @@ def generate_scripts(picks: list, board: list[Evidence], library: list, breakdow
             continue
         used[ev.fw["id"]] = used.get(ev.fw["id"], 0) + 1
         refs = choose_references(ev.fw, library, features, pick.topic.name)
-        context = {
-            "brand_brief": brief, "my_material": material if has_material else "(none provided: use [placeholders] for any personal story or result)",
-            "topic": pick.topic.name,
-            "angle": {"name": idea.angle, "meaning": angle_meanings.get(idea.angle, ""), "pitch": idea.pitch, "suggested_hook": idea.hook},
-            "framework": {"name": ev.fw["name"], "shape": ev.fw["shape"], "beats": ev.fw["beats"], "hook_formula": ev.fw["hook_formula"],
-                          "evidence_level": ev.level, "evidence": ev.reasons},
-            "references": [reference_brief(breakdowns[r.id]) for r in refs if r.id in breakdowns and not breakdowns[r.id].error],
-            "constraints": {"target_seconds": cfg["target_seconds"], "words_per_second": cfg["words_per_second"],
-                            "audio_hook_max_words": cfg["audio_hook_max_words"], "text_hook_max_words": cfg["text_hook_max_words"]},
-        }
+        context = make_context(topic=pick.topic.name, angle_name=idea.angle, angle_meaning=angle_meanings.get(idea.angle, ""), pitch=idea.pitch,
+                               hook=idea.hook, ev=ev, refs_briefs=[reference_brief(breakdowns[r.id]) for r in refs if r.id in breakdowns and not breakdowns[r.id].error],
+                               brief=brief, material=material, has_material=has_material, cfg=cfg)
         allowed = "\n".join([brief, material if has_material else "", ev.fw["shape"], pick.topic.name])
         script = write_script(llm, context, ev.fw, vocab, cfg, allowed_text=allowed, reference_transcripts=all_transcripts, has_material=has_material)
         out.append(ScriptResult(script, ev, refs, pick.slot))

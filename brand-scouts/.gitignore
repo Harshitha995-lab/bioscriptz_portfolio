@@ -3,3 +3,5 @@ out/
 data/state/
 __pycache__/
 *.pyc
+data/*.db
+data/*.db-journal

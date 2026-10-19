@@ -173,3 +173,26 @@ account's usual" when the account's median is unknown; transcripts depend on the
 
 The weekly email, the DNA Playbook, other platforms. The "radical triad system" is not implemented: it is not a term
 I recognise, so the 100 -> 10 cut uses the topic score above until its three parts are defined.
+
+---
+
+## The 5-step agent on Apify's free plan (`agent.py`)
+
+Nothing here has been run against real Apify, Instagram or Anthropic yet; it is tested on synthetic data only. Try it offline first: `python3 agent.py --sample harvest` then `outliers`, `analyse`, `script --topic "..." --from-reel sample_prof_3_01`, `vault list`.
+
+| Step | Command |
+|---|---|
+| 1 Niche watchlist | `agent.py niche list` / `add-keywords` / `add-creators "<niche>" handle1 handle2` (edit `config/niches.json`) |
+| 2 Viral outliers | `agent.py harvest --dry-run`, then `harvest`, then `outliers` |
+| 3 Transcripts + hooks + winning formats | `agent.py analyse` → `out/agent/formats.md` |
+| 4 Scripts / remix | `agent.py script --topic "..." [--from-reel ID]` |
+| 5 Vault + export | `agent.py vault list/show/status/tag/note/search/export --format md\|csv\|json\|xlsx` |
+
+**Setup (free plan):**
+1. Create an Apify account (free plan: $5 credit a month, no rollover). In Billing, set a **monthly usage limit**; this is the real safety net.
+2. Pick two actors in the Apify Store: one that returns Reels for keywords/hashtags, one for a profile's Reels. Put their ids, input templates and the **price per 1,000 results from the actor's page** in `config/apify.json`.
+3. Copy `.env.example` to `.env`; add `APIFY_TOKEN` and `ANTHROPIC_API_KEY`. Never paste them into chat or commit them.
+4. Add real creator handles per niche. Without creators, every outlier is "weak" (compared with follower count), and a small account can spike for reasons unrelated to the content.
+5. `agent.py harvest --dry-run` shows how the budget splits; the real run refuses if it would not fit (exit 3) and passes a per-run spend cap to Apify. Reels are stored in `data/vault.db`, so analysing them again costs nothing.
+
+Not built: DNA Playbook, weekly email, platforms other than Instagram.
