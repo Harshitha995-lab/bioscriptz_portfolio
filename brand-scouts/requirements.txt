@@ -5,3 +5,5 @@ anthropic
 faster-whisper
 # Optional: Excel export
 openpyxl
+# Optional: Google Gemini (free tier) instead of Claude. Set LLM_PROVIDER=gemini in .env
+google-genai

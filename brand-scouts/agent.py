@@ -260,10 +260,11 @@ def cmd_compare(args, ctx) -> int:
         from scouts.fake_llm import FakeLLM
         a = b = FakeLLM()
     else:
-        if not os.environ.get("ANTHROPIC_API_KEY"):
-            raise UsageError("ANTHROPIC_API_KEY is missing. Put it in .env (see .env.example).")
-        from scouts.llm import AnthropicLLM
-        a, b = AnthropicLLM(args.a), AnthropicLLM(args.b)
+        from scouts.llm import make_llm
+        try:
+            a, b = make_llm("analysis", ctx["settings"], args.a), make_llm("analysis", ctx["settings"], args.b)
+        except (ValueError, ImportError) as exc:
+            raise UsageError(f"Could not set up the models: {exc}. Put the keys in .env (see .env.example).") from exc
     res = research.compare_models(reels, a, b, load_vocab())
     print(("[sample: the same stand-in analyst is used for both, so this always agrees] " if ctx["sample"] else "") + f"{res['both_ok']} of {res['reels']} Reels analysed by both ({args.a} vs {args.b}); failures {res['failed_a']} / {res['failed_b']}.")
     for k, v in res["fields"].items():
@@ -391,7 +392,7 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--top", type=int)
 
     c = sub.add_parser("compare-models", help="run the same stored Reels through two models and show where they disagree")
-    c.add_argument("--a", default="claude-haiku-5-5")
+    c.add_argument("--a", default="claude-haiku-5-5", help="a Claude model, or gemini:<model>")
     c.add_argument("--b", default="claude-sonnet-5-5")
     c.add_argument("--n", type=int, default=10)
     c.add_argument("--niche")
@@ -449,10 +450,13 @@ def main(argv=None, *, harvester=None, llm=None, niches_path=None, now=None) -> 
                 from scouts.fake_llm import FakeLLM
                 ctx["llm"] = FakeLLM()
             else:
-                if not os.environ.get("ANTHROPIC_API_KEY"):
-                    raise UsageError("ANTHROPIC_API_KEY is missing. Put it in .env (see .env.example).")
-                from scouts.llm import AnthropicLLM, model_for
-                ctx["llm"] = AnthropicLLM(model_for("scripts" if args.cmd == "script" else "analysis", ctx["settings"]))
+                from scouts.llm import key_name, make_llm
+                try:
+                    if not os.environ.get(key_name()):
+                        raise UsageError(f"{key_name()} is missing. Put it in .env (see .env.example).")
+                    ctx["llm"] = make_llm("scripts" if args.cmd == "script" else "analysis", ctx["settings"])
+                except ValueError as exc:
+                    raise UsageError(str(exc)) from exc
         handler = {"harvest": cmd_harvest, "usage": cmd_usage, "outliers": cmd_outliers, "analyse": cmd_analyse,
                    "script": cmd_script, "compare-models": cmd_compare, "vault": cmd_vault}[args.cmd]
         return handler(args, ctx)

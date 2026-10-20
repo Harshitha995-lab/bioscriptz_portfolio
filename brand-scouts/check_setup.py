@@ -24,12 +24,24 @@ def main() -> int:
     row(sys.version_info >= (3, 10), f"Python {sys.version.split()[0]} (needs 3.10 or newer)", "Install Python 3.11+ from python.org and tick 'Add to PATH'")
     row(shutil.which("ffmpeg") is not None, "ffmpeg (video frames and audio for transcripts)",
         "In PowerShell: winget install Gyan.FFmpeg   then close and reopen the terminal")
-    for mod, pipname, needed in (("apify_client", "apify-client", True), ("anthropic", "anthropic", True), ("faster_whisper", "faster-whisper", True),
+    from scouts.llm import key_name, provider
+    try:
+        which = provider()
+    except ValueError as exc:
+        which = "anthropic"
+        row(False, str(exc), "Set LLM_PROVIDER=anthropic or LLM_PROVIDER=gemini in .env")
+    for mod, pipname, needed in (("apify_client", "apify-client", True), ("anthropic", "anthropic", which == "anthropic"),
+                                 ("google.genai", "google-genai", which == "gemini"), ("faster_whisper", "faster-whisper", True),
                                  ("openpyxl", "openpyxl", False)):
-        row(importlib.util.find_spec(mod) is not None, f"Python package {pipname}", f"pip install {pipname}", needed)
+        try:
+            found = importlib.util.find_spec(mod) is not None
+        except ModuleNotFoundError:          # a dotted name whose parent package is missing
+            found = False
+        row(found, f"Python package {pipname}", f"pip install {pipname}", needed)
 
     print("Keys in .env (values are never shown)")
-    for k in ("APIFY_TOKEN", "ANTHROPIC_API_KEY"):
+    print(f"  AI provider: {which}")
+    for k in ("APIFY_TOKEN", key_name(which)):
         row(bool(os.environ.get(k)), k, f"Add a line {k}=... to {ROOT / '.env'}")
 
     print("config/apify.json")

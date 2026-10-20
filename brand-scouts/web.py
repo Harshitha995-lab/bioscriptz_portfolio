@@ -2,7 +2,7 @@
 """Local web app: type a topic, get the top outlier Reels of the last N days, decoded.
 
     python3 web.py --sample        # offline demo, synthetic data, no keys, no spend
-    python3 web.py                 # live: needs APIFY_TOKEN, ANTHROPIC_API_KEY and config/apify.json
+    python3 web.py                 # live: needs APIFY_TOKEN, a Claude or Gemini key (LLM_PROVIDER in .env) and config/apify.json
 
 Runs on 127.0.0.1 only. A live run spends Apify credit, so it shows the estimated cost first and needs a click to confirm.
 """
@@ -54,14 +54,19 @@ class App:
         if self.sample:
             from scouts.fake_llm import FakeLLM
             return FakeLLM()
-        from scouts.llm import AnthropicLLM, model_for
-        return AnthropicLLM(model_for(task, self.settings))
+        from scouts.llm import make_llm
+        return make_llm(task, self.settings)
 
     def live_ready(self) -> str:
         """'' when a live run can start, else the thing the user must fix."""
         if self.sample:
             return ""
-        for k in ("APIFY_TOKEN", "ANTHROPIC_API_KEY"):
+        from scouts.llm import key_name
+        try:
+            keys = ("APIFY_TOKEN", key_name())
+        except ValueError as exc:
+            return str(exc)
+        for k in keys:
             if not os.environ.get(k) and self.llm is None:
                 return f"{k} is missing from .env"
         cfg = self.apify_cfg()

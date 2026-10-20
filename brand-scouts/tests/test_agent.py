@@ -212,3 +212,93 @@ class BatchTier(unittest.TestCase):
     def test_too_small_a_batch_gives_no_outliers(self):
         reels = [reel(i, f"acc{i}", 1000 + i) for i in range(5)] + [reel("hit", "zed", 50000)]
         self.assertEqual(find_outliers(reels, now=NOW)[0], [])
+
+
+class GeminiTests(unittest.TestCase):
+    """GeminiLLM against stand-in google.genai modules: checks our glue (request shape, pacing, retries), not Google's service."""
+
+    def install_fake(self, replies):
+        import sys, types
+        seen = {"calls": 0, "contents": []}
+
+        class Part:
+            @staticmethod
+            def from_bytes(data, mime_type):
+                return ("image", mime_type, len(data))
+
+        class Config:
+            def __init__(self_inner, **kw):
+                self_inner.kw = kw
+        genai = types.ModuleType("google.genai")
+        types_mod = types.ModuleType("google.genai.types")
+        types_mod.Part, types_mod.GenerateContentConfig = Part, Config
+
+        class Models:
+            def generate_content(self_inner, model, contents, config):
+                seen["calls"] += 1
+                seen["model"], seen["contents"], seen["config"] = model, contents, config.kw
+                r = replies.pop(0)
+                if isinstance(r, Exception):
+                    raise r
+                return types.SimpleNamespace(text=r)
+
+        class Client:
+            def __init__(self_inner, api_key=None):
+                seen["key"] = api_key
+                self_inner.models = Models()
+        genai.Client, genai.types = Client, types_mod
+        google = types.ModuleType("google")
+        google.genai = genai
+        saved = {k: sys.modules.get(k) for k in ("google", "google.genai", "google.genai.types")}
+        sys.modules.update({"google": google, "google.genai": genai, "google.genai.types": types_mod})
+
+        def restore():
+            for k, v in saved.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v
+        self.addCleanup(restore)
+        return seen
+
+    def test_request_shape_and_json_parse(self):
+        from scouts.llm import GeminiLLM
+        seen = self.install_fake(['```json\n{"ok": true}\n```'])
+        llm = GeminiLLM(model="m1", api_key="K", min_interval=0, sleep=lambda s: None)
+        self.assertEqual(llm.complete_json("SYS", "USER", images=[b"abc"]), {"ok": True})
+        self.assertEqual((seen["model"], seen["key"]), ("m1", "K"))
+        self.assertEqual(seen["contents"], [("image", "image/jpeg", 3), "USER"])
+        self.assertTrue(seen["config"]["system_instruction"].startswith("SYS"))
+        self.assertEqual(seen["config"]["response_mime_type"], "application/json")
+
+    def test_retries_rate_limits_then_succeeds_and_gives_up_on_other_errors(self):
+        from scouts.llm import GeminiLLM
+        pauses = []
+        seen = self.install_fake([RuntimeError("429 RESOURCE_EXHAUSTED"), RuntimeError("503 UNAVAILABLE"), '{"ok": 1}'])
+        llm = GeminiLLM(model="m", api_key="K", min_interval=0, sleep=pauses.append)
+        self.assertEqual(llm.complete_json("S", "U"), {"ok": 1})
+        self.assertEqual((seen["calls"], pauses), (3, [5, 20]))
+        seen = self.install_fake([ValueError("400 invalid api key")])
+        with self.assertRaises(ValueError):
+            GeminiLLM(model="m", api_key="K", min_interval=0, sleep=lambda s: None).complete_json("S", "U")
+        self.assertEqual(seen["calls"], 1)                       # a real error is not retried
+
+    def test_gives_up_after_the_last_pause(self):
+        from scouts.llm import GeminiLLM
+        seen = self.install_fake([RuntimeError("429")] * 4)
+        with self.assertRaises(RuntimeError):
+            GeminiLLM(model="m", api_key="K", min_interval=0, sleep=lambda s: None).complete_json("S", "U")
+        self.assertEqual(seen["calls"], 4)
+
+    def test_provider_selection(self):
+        import os
+        from scouts import llm as L
+        old = os.environ.get("LLM_PROVIDER")
+        self.addCleanup(lambda: os.environ.pop("LLM_PROVIDER", None) if old is None else os.environ.__setitem__("LLM_PROVIDER", old))
+        os.environ.pop("LLM_PROVIDER", None)
+        self.assertEqual((L.provider(), L.key_name()), ("anthropic", "ANTHROPIC_API_KEY"))
+        os.environ["LLM_PROVIDER"] = "Gemini"
+        self.assertEqual((L.provider(), L.key_name()), ("gemini", "GEMINI_API_KEY"))
+        os.environ["LLM_PROVIDER"] = "openai"
+        with self.assertRaises(ValueError):
+            L.provider()
