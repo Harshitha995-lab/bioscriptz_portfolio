@@ -232,3 +232,40 @@ class ProfileShape(unittest.TestCase):
         reels += [Reel(id=f"old{i}", url="u", account="oohochy", plays=1_700_000, posted_at=now - timedelta(days=1000 + i)) for i in range(6)]
         self.assertEqual(account_usuals(reels, 5, now=now, days=180)["oohochy"], 3000.0)     # recent window only
         self.assertGreater(account_usuals(reels, 5, now=now)["oohochy"], 100000)            # without the window the old viral posts win
+
+
+class RunObjects(unittest.TestCase):
+    """apify-client returns a dict in older versions and a Run object (snake_case attributes) in newer ones."""
+
+    def fake_client(self, run):
+        items = [{"id": "1", "url": "https://www.instagram.com/p/x/", "ownerUsername": "a", "videoPlayCount": 5}]
+
+        class Actor:
+            def call(self, run_input=None):
+                return run
+
+        class Dataset:
+            def iterate_items(self_inner):
+                return iter(items)
+
+        class Client:
+            def actor(self_inner, _id):
+                return Actor()
+
+            def dataset(self_inner, _id):
+                return Dataset()
+        return Client()
+
+    def test_dict_and_object_runs(self):
+        from decimal import Decimal
+        from types import SimpleNamespace
+        from scouts.instagram_harvest import _run_actor
+        for run in ({"defaultDatasetId": "d", "usageTotalUsd": 0.05}, SimpleNamespace(default_dataset_id="d", usage_total_usd=Decimal("0.05"))):
+            reels, meta = _run_actor(self.fake_client(run), "x/y", {}, None, "keyword", None)
+            self.assertEqual((len(reels), meta["usage_usd"]), (1, 0.05))
+
+    def test_run_without_dataset_is_a_clear_error(self):
+        from types import SimpleNamespace
+        from scouts.instagram_harvest import _run_actor
+        with self.assertRaises(RuntimeError):
+            _run_actor(self.fake_client(SimpleNamespace(status="FAILED")), "x/y", {}, None, "keyword", None)
