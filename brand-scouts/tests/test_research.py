@@ -115,6 +115,20 @@ class Harvest(unittest.TestCase):
         self.assertAlmostEqual(v.month_spend(NOW), 0.2 + 6 / 1000 * 2.7)
         self.assertEqual(res["keyword_reels"], 1)
 
+    def test_blocked_profile_scrape_keeps_stage_one(self):
+        v = Vault(":memory:")
+
+        def fake(keywords, cfg, token, max_reels, creators, **kw):
+            if creators:
+                raise RuntimeError("blocked")
+            return [Reel(id="k1", url="u", account="acc", plays=9000, followers=2000, keyword="x", posted_at=NOW)], {"usage_usd": 0.2}
+        msgs = []
+        plan = research.plan_run(research.default_keywords("skin"), 0.0, 2.7, 1.5)
+        res = research.harvest_topic(v, "skin", plan, {}, "t", fake, msgs.append, now=NOW)
+        self.assertEqual((res["keyword_reels"], res["baseline_reels"]), (1, 0))
+        self.assertEqual(v.get_reel("k1").niche, "skin")
+        self.assertTrue(any("baseline" in m.lower() for m in msgs))
+
     def test_refuses_when_plan_not_ok(self):
         plan = research.plan_run(research.default_keywords("skin"), 4.9, 2.7, 1.5)
         with self.assertRaises(RuntimeError):
@@ -199,7 +213,7 @@ class Web(unittest.TestCase):
     def live_app(self, fake):
         class Live(web.App):
             def apify_cfg(self):
-                return {"actor_id": "a", "price_per_1000_results_usd": 2.7}
+                return {"actor_id": "a", "price_per_1000_results_usd": 2.7, "input_verified": True}
 
         import os
         os.environ["APIFY_TOKEN"] = "t"

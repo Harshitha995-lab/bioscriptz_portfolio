@@ -3,6 +3,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import timedelta
 from io import StringIO
@@ -29,6 +30,11 @@ class Cli(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.dir)
         shutil.copy(agent.ROOT / "config" / "niches.json", self.dir / "niches.json")
         self.base = ["--vault", str(self.dir / "v.db")]
+        self.apify = {"actor_id": "a", "profile_actor_id": "a", "price_per_1000_results_usd": None, "input_verified": True}
+        real = agent.load_json
+        patcher = mock.patch("agent.load_json", lambda path: self.apify if str(path).endswith("apify.json") else real(path))
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def run_cli(self, *argv, **kw):
         out, err = StringIO(), StringIO()
@@ -177,6 +183,13 @@ class EndToEnd(Cli):
         Vault(self.dir / "v.db").record_run("harvest", 4.5, 100)
         code, *_ = self.run_cli("harvest", "--price", "2.7", "--per-keyword", "10", harvester=lambda *a, **k: ([], {}))
         self.assertEqual(code, 3)
+
+    def test_live_refuses_until_input_verified(self):
+        self.apify["input_verified"] = False
+        code, _, err = self.run_cli("harvest", "--price", "2.7", "--per-keyword", "10", harvester=lambda *a, **k: ([], {}))
+        self.assertEqual(code, 2)
+        self.assertIn("verified", err)
+        self.assertEqual(self.run_cli("harvest", "--dry-run")[0], 0)          # planning stays allowed
 
     def test_live_requires_price(self):
         code, _, err = self.run_cli("harvest")

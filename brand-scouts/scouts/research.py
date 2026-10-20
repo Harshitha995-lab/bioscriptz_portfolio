@@ -252,13 +252,19 @@ def harvest_topic(vault, topic: str, plan: RunPlan, apify_cfg: dict, token: str,
         n = min(len(creators), affordable // plan.per_creator)
         if n:
             progress(f"Fetching recent Reels of the {n} strongest creators to learn what is normal for each…")
-            base, info2 = harvester([], apify_cfg, token, None, creators[:n], per_keyword=0, per_creator=plan.per_creator,
-                                    run_cap_usd=budget.per_run_cap(left, 1))
+            try:
+                base, info2 = harvester([], apify_cfg, token, None, creators[:n], per_keyword=0, per_creator=plan.per_creator,
+                                        run_cap_usd=budget.per_run_cap(left, 1))
+            except Exception as exc:        # e.g. the actor is blocked on profiles: keep stage 1, outliers will just be 'weak'
+                base, info2, note = [], {}, f"{type(exc).__name__}: {exc}"
+                progress("Creator baselines could not be fetched; outliers will be judged against follower count only.")
             vault.upsert_reels(base, now)           # niche stays blank: they are a baseline, not candidates
             got2 = len(base)
             spent["stage2"] = info2.get("usage_usd") if info2.get("usage_usd") is not None else got2 / 1000 * plan.price
             vault.record_run("topic-baseline", spent["stage2"], got2,
                              f"{topic}; " + ("reported by Apify" if info2.get("usage_usd") is not None else "ESTIMATED"), now)
+            if not got2:
+                progress("The baseline fetch returned no Reels (this actor reported limited profile scraping). Outliers will be weak leads.")
     return {"keyword_reels": len(found), "baseline_reels": got2, "cost": round(sum(spent.values()), 4)}
 
 

@@ -123,6 +123,9 @@ def cmd_harvest(args, ctx) -> int:
 
     apify_cfg = load_json(ROOT / "config" / "apify.json")
     price, price_src = get_price(args, apify_cfg)
+    if not apify_cfg.get("input_verified") and not args.dry_run:
+        raise UsageError("config/apify.json is not verified yet. Check input_template against the actor's Input > JSON tab, do a tiny test run, "
+                         "then set input_verified to true.")
     if price is None and not args.dry_run:
         raise UsageError("Set price_per_1000_results_usd in config/apify.json (or pass --price). Copy it from the actor's Pricing tab; "
                          "without it the free-plan budget cannot be protected.")

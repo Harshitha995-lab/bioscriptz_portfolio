@@ -67,6 +67,8 @@ class App:
         cfg = self.apify_cfg()
         if cfg.get("actor_id", "REPLACE_ME") == "REPLACE_ME":
             return "actor_id is not set in config/apify.json"
+        if not cfg.get("input_verified"):
+            return "config/apify.json input templates are not verified against the actor yet (set input_verified to true after a tiny test run)"
         if cfg.get("price_per_1000_results_usd") is None:
             return "price_per_1000_results_usd is not set in config/apify.json (copy it from the actor's Pricing tab)"
         return ""
