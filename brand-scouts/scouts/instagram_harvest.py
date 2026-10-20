@@ -155,13 +155,29 @@ def _call(actor, run_input: dict, max_charge_usd: float | None):
     return actor.call(**kwargs)
 
 
+def run_field(run, camel: str, snake: str):
+    """A field of an Apify run. Older apify-client versions return a dict, newer ones a Run object with snake_case attributes."""
+    if isinstance(run, dict):
+        return run.get(camel, run.get(snake))
+    for name in (snake, camel):
+        if hasattr(run, name):
+            return getattr(run, name)
+    if hasattr(run, "model_dump"):
+        d = run.model_dump(by_alias=False)
+        return d.get(snake, d.get(camel))
+    return None
+
+
 def _run_actor(client, actor_id: str, run_input: dict, field_map, source: str, limit: int | None, keyword: str = "",
                max_charge_usd: float | None = None):
     run = _call(client.actor(actor_id), run_input, max_charge_usd)
     if not run:
         raise RuntimeError(f"Apify run for {actor_id} returned nothing; check the run in the Apify console.")
     reels, raw_sample, items, skipped = [], [], 0, 0
-    for item in client.dataset(run["defaultDatasetId"]).iterate_items():
+    dataset_id = run_field(run, "defaultDatasetId", "default_dataset_id")
+    if not dataset_id:
+        raise RuntimeError(f"Apify run for {actor_id} gave no dataset id; check the run in the Apify console.")
+    for item in client.dataset(dataset_id).iterate_items():
         items += 1
         if len(raw_sample) < 3:
             raw_sample.append(item)
@@ -174,8 +190,12 @@ def _run_actor(client, actor_id: str, run_input: dict, field_map, source: str, l
         reels.append(reel)
         if limit and len(reels) >= limit:
             break
-    usage = run.get("usageTotalUsd")
-    return reels, {"items": items, "skipped": skipped, "raw_sample": raw_sample, "usage_usd": float(usage) if isinstance(usage, (int, float)) else None}
+    usage = run_field(run, "usageTotalUsd", "usage_total_usd")
+    try:
+        usage = float(usage) if usage is not None else None       # may be a Decimal in newer clients
+    except (TypeError, ValueError):
+        usage = None
+    return reels, {"items": items, "skipped": skipped, "raw_sample": raw_sample, "usage_usd": usage}
 
 
 def clean_handles(lines: list[str]) -> list[str]:
