@@ -6,7 +6,9 @@ config). On a first live run, check out/<week>/raw_sample.json against the mappi
 """
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import quote
 
 from .common import Reel, parse_datetime
 
@@ -96,6 +98,16 @@ def split_keywords(lines: list[str]) -> tuple[list[str], list[str]]:
     return hashtags, terms
 
 
+def tag_url(keyword: str) -> str:
+    """Instagram hashtag page for a keyword: spaces and punctuation dropped, as hashtags are one word."""
+    tag = re.sub(r"[\W_]+", "", keyword.lstrip("#").lower())
+    return f"https://www.instagram.com/explore/tags/{quote(tag)}/" if tag else ""
+
+
+def profile_url(handle: str) -> str:
+    return f"https://www.instagram.com/{handle.strip().lstrip('@')}/"
+
+
 def render_template(obj, subs: dict):
     """Fill {hashtags} / {terms} placeholders in the actor input template."""
     if isinstance(obj, str):
@@ -181,7 +193,7 @@ def harvest(keyword_lines: list[str], cfg: dict, token: str, max_reels: int | No
     raw_sample: list = []
 
     if handles:
-        run_input = render_template(_limited(cfg.get("profile_input_template", {}), per_creator), {"{usernames}": handles})
+        run_input = render_template(_limited(cfg.get("profile_input_template", {}), per_creator), {"{usernames}": handles, "{profile_urls}": [profile_url(h) for h in handles]})
         got, meta = _run_actor(client, cfg["profile_actor_id"], run_input, field_map, "creator", max_reels, max_charge_usd=run_cap_usd)
         reels += got
         raw_sample += meta.pop("raw_sample")
@@ -199,7 +211,8 @@ def harvest(keyword_lines: list[str], cfg: dict, token: str, max_reels: int | No
 
             def one(job):
                 label, hs_, ts_ = job
-                run_input = render_template(_limited(cfg.get("input_template", {}), per_keyword), {"{hashtags}": hs_, "{terms}": ts_})
+                run_input = render_template(_limited(cfg.get("input_template", {}), per_keyword), {"{hashtags}": hs_, "{terms}": ts_,
+                                                                                                             "{hashtag_urls}": [u for u in map(tag_url, hs_ + ts_) if u]})
                 return _run_actor(client, cfg["actor_id"], run_input, field_map, "keyword", None, keyword=label.lstrip("#"),
                                   max_charge_usd=run_cap_usd)
 
@@ -241,7 +254,7 @@ def harvest_profiles(usernames: list[str], cfg: dict, token: str, per_account: i
     template = dict(cfg.get("profile_input_template", {}))
     if per_account and "resultsLimit" in template:
         template["resultsLimit"] = per_account
-    run_input = render_template(template, {"{usernames}": handles})
+    run_input = render_template(template, {"{usernames}": handles, "{profile_urls}": [profile_url(h) for h in handles]})
     reels, meta = _run_actor(ApifyClient(token), cfg["profile_actor_id"], run_input, cfg.get("field_map"), "followup", None)
     meta.pop("raw_sample", None)
     return reels, meta

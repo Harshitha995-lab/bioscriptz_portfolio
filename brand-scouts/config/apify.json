@@ -11,19 +11,27 @@
     "For the transcript and the video hook the actor should return a direct video URL (videoUrl) and, if it can, a transcript; otherwise transcripts are made from the video with ffmpeg + faster-whisper.",
     "price_per_1000_results_usd: copy the price from the actor's page (Pricing tab) so `agent.py harvest` can estimate cost and stay inside the free plan. If you use two actors, put the higher price.",
     "apify/instagram-scraper ($2.70 per 1,000 results, seen on its page). Its page warned 'Reduced performance: scraping profile posts is currently limited due to blocking', so creator baselines may come back empty.",
-    "input_verified stays false until input_template / profile_input_template have been checked against this actor's Input > JSON tab and a tiny test run has returned Reels. Live runs refuse while it is false."
+    "input_verified stays false until input_template / profile_input_template have been checked against this actor's Input > JSON tab and a tiny test run has returned Reels. Live runs refuse while it is false.",
+    "Templates for apify/instagram-scraper follow the field names in its default input (directUrls, resultsType, resultsLimit, addParentData). 'resultsType: reels' and the hashtag-page URL form are from its description and NOT yet confirmed by a test run. {hashtag_urls} and {profile_urls} are filled by the harvester."
   ],
   "actor_id": "apify/instagram-scraper",
   "input_template": {
-    "hashtags": "{hashtags}",
-    "searchTerms": "{terms}",
-    "resultsLimit": 30
+    "directUrls": [
+      "{hashtag_urls}"
+    ],
+    "resultsType": "reels",
+    "resultsLimit": 30,
+    "addParentData": false
   },
   "field_map": {},
   "profile_actor_id": "apify/instagram-scraper",
   "profile_input_template": {
-    "usernames": "{usernames}",
-    "resultsLimit": 12
+    "directUrls": [
+      "{profile_urls}"
+    ],
+    "resultsType": "reels",
+    "resultsLimit": 12,
+    "addParentData": false
   },
   "per_keyword_runs": true,
   "parallel_runs": 4,

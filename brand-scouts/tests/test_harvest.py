@@ -190,3 +190,13 @@ class LiveGlueTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TemplateUrls(unittest.TestCase):
+    def test_hashtag_and_profile_urls(self):
+        from scouts.instagram_harvest import profile_url, render_template, tag_url
+        self.assertEqual(tag_url("#Personal Brand tips!"), "https://www.instagram.com/explore/tags/personalbrandtips/")
+        self.assertEqual(tag_url("###"), "")
+        self.assertEqual(profile_url("@some.one"), "https://www.instagram.com/some.one/")
+        out = render_template({"directUrls": ["{hashtag_urls}"], "resultsType": "reels"}, {"{hashtag_urls}": ["u1", "u2"]})
+        self.assertEqual(out["directUrls"], ["u1", "u2"])
