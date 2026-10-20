@@ -237,7 +237,10 @@ class Web(unittest.TestCase):
             self.assertAlmostEqual(v.month_spend(NOW), 0.22)
 
     def test_live_blocked_until_price_set(self):
-        app = web.App(self.dir / "v.db", False, llm=FakeLLM(), now=NOW)       # real apify.json: actor not set
+        class Unset(web.App):
+            def apify_cfg(self):
+                return {"actor_id": "a", "price_per_1000_results_usd": None, "input_verified": True}
+        app = Unset(self.dir / "v.db", False, llm=FakeLLM(), now=NOW)
         self.serve(app)
         code, plan = self.call("/api/plan", {"topic": "skin"})
         self.assertFalse(plan["ok"])

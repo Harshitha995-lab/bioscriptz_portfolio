@@ -192,6 +192,9 @@ def harvest(keyword_lines: list[str], cfg: dict, token: str, max_reels: int | No
     info: dict = {"creator_accounts": len(handles), "items": 0, "skipped": 0}
     raw_sample: list = []
 
+    if handles and cfg.get("profile_verified") is False:
+        info["creators_skipped"] = "profile scraping of this actor has not been verified (profile_verified is false in config/apify.json)"
+        handles = []
     if handles:
         run_input = render_template(_limited(cfg.get("profile_input_template", {}), per_creator), {"{usernames}": handles, "{profile_urls}": [profile_url(h) for h in handles]})
         got, meta = _run_actor(client, cfg["profile_actor_id"], run_input, field_map, "creator", max_reels, max_charge_usd=run_cap_usd)

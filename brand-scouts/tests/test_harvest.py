@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import unittest
 
 from scouts.instagram_harvest import item_to_reel, render_template, split_keywords, to_int
@@ -200,3 +201,18 @@ class TemplateUrls(unittest.TestCase):
         self.assertEqual(profile_url("@some.one"), "https://www.instagram.com/some.one/")
         out = render_template({"directUrls": ["{hashtag_urls}"], "resultsType": "reels"}, {"{hashtag_urls}": ["u1", "u2"]})
         self.assertEqual(out["directUrls"], ["u1", "u2"])
+
+
+class RealShape(unittest.TestCase):
+    """Two items from a real run of apify/instagram-scraper (hashtag page, resultsType reels), trimmed."""
+
+    def test_maps_real_items(self):
+        data = json.loads((Path(__file__).parent.parent / "data" / "apify_real_shape.json").read_text(encoding="utf-8"))
+        r = item_to_reel(data[0], source="keyword")
+        self.assertEqual((r.account, r.plays, r.likes, r.comments), ("oohochy", 8400, 497, 110))
+        self.assertEqual(r.url, "https://www.instagram.com/p/DeaOaDAzcMQ/")
+        self.assertEqual(r.posted_at.isoformat(), "2026-10-12T21:47:17+00:00")
+        self.assertAlmostEqual(r.duration_s, 90.166, places=2)
+        self.assertTrue(r.video_url.endswith("v1.mp4"))
+        self.assertIsNone(r.followers)             # this actor gives no follower count
+        self.assertEqual(r.transcript, "")         # nor a transcript: it must come from the video

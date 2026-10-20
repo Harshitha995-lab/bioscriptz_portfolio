@@ -167,7 +167,8 @@ def decode(outlier: Outlier, bd: ViralBreakdown) -> dict:
     base = {"reel_id": r.id, "creator": r.account, "followers": r.followers, "link": r.url, "plays": r.plays, "likes": r.likes,
             "comments": r.comments, "ratio": round(outlier.ratio, 1), "strong": outlier.strong,
             "basis": f"{outlier.ratio:.0f}× this creator's usual {outlier.usual:,.0f} plays" if outlier.strong
-            else f"{outlier.ratio:.0f}× their follower count (no creator baseline yet; treat as a lead)",
+            else (f"{outlier.ratio:.0f}× their follower count (no creator baseline yet; treat as a lead)" if outlier.basis == "followers"
+                  else f"{outlier.ratio:.0f}× the typical Reel in this search (no creator baseline or follower count; treat as a lead)"),
             "posted_at": r.posted_at.isoformat() if r.posted_at else None, "keyword": r.keyword}
     if bd.error:
         return {**base, "error": bd.error}
@@ -263,7 +264,9 @@ def harvest_topic(vault, topic: str, plan: RunPlan, apify_cfg: dict, token: str,
             spent["stage2"] = info2.get("usage_usd") if info2.get("usage_usd") is not None else got2 / 1000 * plan.price
             vault.record_run("topic-baseline", spent["stage2"], got2,
                              f"{topic}; " + ("reported by Apify" if info2.get("usage_usd") is not None else "ESTIMATED"), now)
-            if not got2:
+            if not got2 and info2.get("creators_skipped"):
+                progress("Creator baselines skipped: " + info2["creators_skipped"] + ". Outliers are judged against the typical Reel in the search.")
+            elif not got2:
                 progress("The baseline fetch returned no Reels (this actor reported limited profile scraping). Outliers will be weak leads.")
     return {"keyword_reels": len(found), "baseline_reels": got2, "cost": round(sum(spent.values()), 4)}
 

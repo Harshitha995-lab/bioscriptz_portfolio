@@ -391,7 +391,7 @@ def render_outliers(outliers, stats: dict, *, niche: str | None, days: int, k_us
     for i, o in enumerate(outliers, 1):
         r = o.reel
         lines.append(f"| {i} | [@{r.account}]({r.url}) | {r.niche or '-'} | {r.keyword or '-'} | **{o.ratio:.0f}×** | {r.plays:,} | {o.velocity:,.0f} | "
-                     f"{'strong: own usual ' + format(o.usual, ',.0f') if o.strong else 'weak: vs followers'} |")
+                     f"{'strong: own usual ' + format(o.usual, ',.0f') if o.strong else ('weak: vs followers' if o.basis == 'followers' else 'weak: vs this search')} |")
     return "\n".join(lines)
 
 
@@ -435,7 +435,7 @@ def render_formats(res, date: str, sample: bool, cards: int = 10) -> str:
     for rank, o in enumerate(res.outliers[:cards], 1):
         r, bd = o.reel, res.breakdowns.get(o.reel.id)
         lines.append(f"### {rank}. [@{r.account}]({r.url})" + (f" · {r.niche}" if r.niche else "") + (f" · “{r.keyword}”" if r.keyword else ""))
-        lines.append(f"{r.plays:,} plays · **{o.ratio:.0f}×** " + (f"its usual of {o.usual:,.0f}" if o.strong else "its follower count (weak basis)"))
+        lines.append(f"{r.plays:,} plays · **{o.ratio:.0f}×** " + (f"its usual of {o.usual:,.0f}" if o.strong else ("its follower count (weak basis)" if o.basis == "followers" else "the typical Reel in this search (weak basis)")))
         lines.append("")
         if bd is None or bd.error:
             lines += [f"Breakdown unavailable: {bd.error if bd else 'not analysed'}", ""]

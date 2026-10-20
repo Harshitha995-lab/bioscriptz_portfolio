@@ -4,6 +4,8 @@ Two tiers, because the evidence differs:
   - "own usual": the creator has at least 5 Reels in the vault, and this one beat their median by k times. Strong.
   - "followers": we only know the creator's size, so the Reel is judged by plays against followers. Weaker: a small account
     can spike for reasons that say nothing about the content.
+  - "batch": no baseline and no follower count (some actors give neither), so the Reel is judged against the median of the
+    other Reels in the same search. Weakest: a big account with an ordinary Reel can pass.
 """
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ from .common import Reel, utcnow
 class Outlier:
     reel: Reel
     ratio: float
-    basis: str                 # "own usual" or "followers"
+    basis: str                 # "own usual", "followers" or "batch"
     usual: float | None
     velocity: float
 
@@ -41,6 +43,8 @@ def find_outliers(reels: list[Reel], *, niche: str | None = None, days: int = 30
     now = now or utcnow()
     usuals = account_usuals(reels, min_reels)             # computed on everything, so the baseline is not biased by the filters below
     out, considered = [], 0
+    pool = [r.plays for r in reels if r.plays > 0 and (not niche or r.niche.lower() == niche.lower())]
+    batch_median = float(median(pool)) if len(pool) >= 10 else 0.0       # too few Reels make a meaningless "typical"
     for r in reels:
         if niche and r.niche.lower() != niche.lower():
             continue
@@ -57,6 +61,10 @@ def find_outliers(reels: list[Reel], *, niche: str | None = None, days: int = 30
                 continue
         elif r.followers:
             ratio, basis = r.plays / max(r.followers, 1000), "followers"
+            if ratio < k_followers:
+                continue
+        elif batch_median:
+            ratio, basis = r.plays / batch_median, "batch"
             if ratio < k_followers:
                 continue
         else:

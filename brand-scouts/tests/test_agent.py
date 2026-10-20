@@ -199,3 +199,16 @@ class EndToEnd(Cli):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BatchTier(unittest.TestCase):
+    def test_no_followers_no_usual_uses_batch_median(self):
+        reels = [reel(i, f"acc{i}", 1000 + i) for i in range(12)] + [reel("hit", "zed", 50000)]
+        outs, _ = find_outliers(reels, now=NOW)
+        self.assertEqual([o.reel.id for o in outs], ["hit"])
+        self.assertEqual(outs[0].basis, "batch")
+        self.assertFalse(outs[0].strong)
+
+    def test_too_small_a_batch_gives_no_outliers(self):
+        reels = [reel(i, f"acc{i}", 1000 + i) for i in range(5)] + [reel("hit", "zed", 50000)]
+        self.assertEqual(find_outliers(reels, now=NOW)[0], [])
