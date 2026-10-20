@@ -72,7 +72,7 @@ class GeminiLLM:
 
         key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         self.client = genai.Client(api_key=key)
-        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
         self.max_tokens = max_tokens
         self.min_interval, self._sleep, self._clock = min_interval, sleep or time.sleep, time.monotonic
         self._gate, self._pace, self._last = threading.Semaphore(2), threading.Lock(), 0.0
