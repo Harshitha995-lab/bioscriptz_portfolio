@@ -236,6 +236,27 @@ class Web(unittest.TestCase):
         with Vault(self.dir / "v.db") as v:
             self.assertAlmostEqual(v.month_spend(NOW), 0.22)
 
+    def test_reuse_saved_reels_skips_apify(self):
+        calls = []
+
+        def fake(keywords, cfg, token, max_reels, creators, **kw):
+            calls.append(1)
+            if keywords:
+                return [Reel(id=f"k{i}", url="https://www.instagram.com/r/k", account=f"a{i}", plays=1000 + i, followers=2000, keyword="x", posted_at=NOW) for i in range(12)], {"usage_usd": 0.2}
+            return [], {"usage_usd": 0.0}
+        self.serve(self.live_app(fake))
+        self.assertIsNone(self.call("/api/plan", {"topic": "skin"})[1]["cached"])
+        self.assertEqual(self.call("/api/research", {"topic": "skin", "days": 7, "reuse": True})[0], 400)       # nothing saved yet
+        first = self.wait(self.call("/api/research", {"topic": "skin", "days": 7, "confirm": True})[1]["job"])
+        self.assertEqual(first["error"], "")
+        n_calls = len(calls)
+        self.assertEqual(self.call("/api/plan", {"topic": "skin"})[1]["cached"]["reels"], 12)
+        again = self.wait(self.call("/api/research", {"topic": "skin", "days": 7, "reuse": True})[1]["job"])      # no confirm needed: no Apify spend
+        self.assertEqual((again["status"], again["error"]), ("done", ""))
+        self.assertEqual(len(calls), n_calls)                                                                    # Apify not called again
+        with Vault(self.dir / "v.db") as v:
+            self.assertAlmostEqual(v.month_spend(NOW), 0.2)
+
     def test_live_blocked_until_price_set(self):
         class Unset(web.App):
             def apify_cfg(self):

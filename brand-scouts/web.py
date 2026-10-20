@@ -90,11 +90,22 @@ class App:
             return {"sample": True, "topic": topic, "keywords": kws, "brand": brand, "est_cost": 0.0, "ok": True, "month_spent": spent,
                     "message": "Sample mode: synthetic data, nothing is spent."}
         blocked = self.live_ready()
+        cached = self.cached(topic)
         p = research.plan_run(kws, spent, self.apify_cfg().get("price_per_1000_results_usd"), self.max_run_usd,
                               len(([brand["own"]] if brand and brand["own"] else []) + (brand["competitors"] if brand else []))).to_dict()
         if blocked:
             p.update(ok=False, message=blocked)
-        return {**p, "sample": False, "topic": topic}
+        return {**p, "sample": False, "topic": topic, "cached": cached}
+
+    def cached(self, topic: str) -> dict | None:
+        """Reels already saved for this topic by an earlier search (kept 7 days), so a failed decode need not pay Apify again."""
+        with self.vault() as v:
+            at = v.get_meta("harvested:" + slug(topic))
+            n = len(v.reels(topic)) if at else 0
+        if not at or not n:
+            return None
+        age = ((self.now or utcnow()) - __import__("scouts.common", fromlist=["parse_datetime"]).parse_datetime(at)).total_seconds() / 3600
+        return {"reels": n, "at": at, "hours_ago": round(age, 1)} if age <= 24 * 7 else None
 
     # -- state
     def state(self) -> dict:
@@ -107,11 +118,13 @@ class App:
             return v.get_meta("research:" + slug(topic))
 
     # -- jobs
-    def start(self, topic: str, days: int, confirm: bool, brand_raw=None) -> str:
+    def start(self, topic: str, days: int, confirm: bool, brand_raw=None, reuse: bool = False) -> str:
         topic, brand, _ = self.resolve(topic, brand_raw)
         if days not in (7, 14, 30):
             raise ValueError("Pick 7, 14 or 30 days.")
-        if not self.sample and not confirm:
+        if reuse and not self.sample and not self.cached(topic):
+            raise ValueError("There are no saved Reels for this topic (or they are over a week old). Run a new search.")
+        if not self.sample and not confirm and not reuse:
             raise ValueError("Confirm the estimated cost first.")
         if not self.sample and self.live_ready():
             raise ValueError(self.live_ready())
@@ -121,10 +134,10 @@ class App:
         job = {"id": job_id, "status": "running", "messages": [], "result": None, "error": ""}
         self.jobs[job_id] = job
         self.running = job_id
-        threading.Thread(target=self._run, args=(job, topic, days, brand), daemon=True).start()
+        threading.Thread(target=self._run, args=(job, topic, days, brand, reuse), daemon=True).start()
         return job_id
 
-    def _run(self, job: dict, topic: str, days: int, brand: dict | None = None) -> None:
+    def _run(self, job: dict, topic: str, days: int, brand: dict | None = None, reuse: bool = False) -> None:
         say = lambda m: job["messages"].append(m)
         try:
             now = self.now or utcnow()
@@ -142,6 +155,11 @@ class App:
                         research.add_sample_audience(reels)
                     v.upsert_reels(reels, now)
                     say("Sample mode: loaded synthetic Reels (they are about personal branding, whatever topic you typed).")
+                elif reuse:
+                    say("Using the Reels saved earlier. Apify is not called and nothing is charged by Apify.")
+                    frames, transcriber, warn = research.live_media() if self.harvester is None else (None, None, "")
+                    if warn:
+                        say(warn)
                 else:
                     keywords = research.brand_keywords(brand["brand"], brand["category"]) if brand else research.expand_keywords(topic, self.get_llm("analysis"))
                     plan = research.plan_run(keywords, v.month_spend(now), self.apify_cfg().get("price_per_1000_results_usd"), self.max_run_usd,
@@ -151,6 +169,7 @@ class App:
                         from scouts.instagram_harvest import harvest as harvester
                     res = research.harvest_topic(v, topic, plan, self.apify_cfg(), os.environ.get("APIFY_TOKEN", ""), harvester, say, now,
                                               priority_creators=([brand["own"]] if brand and brand["own"] else []) + (brand["competitors"] if brand else []))
+                    v.set_meta("harvested:" + slug(topic), now.isoformat())
                     say(f"Fetched {res['keyword_reels']} Reels and {res['baseline_reels']} baseline Reels. Cost about ${res['cost']:.2f}.")
                     frames, transcriber, warn = research.live_media() if self.harvester is None else (None, None, "")
                     if warn:
@@ -253,7 +272,7 @@ def make_handler(app: App, port: int):
                 if path == "/api/plan":
                     return self._json(200, app.plan(str(body.get("topic", "")), body.get("brand")))
                 if path == "/api/research":
-                    jid = app.start(str(body.get("topic", "")), int(body.get("days", 7)), body.get("confirm") is True, body.get("brand"))
+                    jid = app.start(str(body.get("topic", "")), int(body.get("days", 7)), body.get("confirm") is True, body.get("brand"), body.get("reuse") is True)
                     return self._json(202, {"job": jid})
                 if path == "/api/script":
                     return self._json(200, app.script(str(body.get("topic", "")), str(body.get("reel_id", "")), str(body.get("my_topic", ""))))

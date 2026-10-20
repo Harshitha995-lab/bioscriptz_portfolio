@@ -63,6 +63,10 @@ $("form").addEventListener("submit", async (e) => {
         `Estimated cost $${plan.est_cost.toFixed(2)} at $${plan.price.toFixed(2)} per 1,000 results${plan.price_assumed ? " (ASSUMED price)" : ""}. Month so far $${plan.month_spent.toFixed(2)} of $5.00.` }));
     const go = el("button", { type: "button", text: `Run for about $${plan.est_cost.toFixed(2)}`, onclick: () => { box.hidden = true; run(topic, days, true, brand); } });
     if (!plan.ok) go.disabled = true;
+    if (plan.cached && !plan.setup_blocked) {
+      inner.append(el("p", { class: "small", text: `You already have ${plan.cached.reels} saved Reels for this topic (${plan.cached.hours_ago} hours old).` }),
+        el("button", { type: "button", text: "Re-use saved Reels (no Apify cost)", onclick: () => { box.hidden = true; run(topic, days, false, brand, true); } }), " ");
+    }
     inner.append(go, " ", el("button", { type: "button", class: "ghost", text: "Cancel", onclick: () => { box.hidden = true; } }));
     box.append(inner);
   } catch (err) { showError(err.message); }
@@ -70,11 +74,11 @@ $("form").addEventListener("submit", async (e) => {
 
 function showError(msg) { $("progress").hidden = false; $("progress").replaceChildren(el("p", { class: "err", text: msg })); }
 
-async function run(topic, days, confirm, brand) {
+async function run(topic, days, confirm, brand, reuse) {
   $("go").disabled = true;
   const prog = $("progress"); prog.hidden = false; prog.replaceChildren(el("p", { text: "Starting…" }));
   try {
-    const { job } = await api("/api/research", { topic, days, confirm, brand });
+    const { job } = await api("/api/research", { topic, days, confirm, brand, reuse: reuse === true });
     for (;;) {
       await new Promise((r) => setTimeout(r, 1200));
       const j = await api("/api/job/" + job);
