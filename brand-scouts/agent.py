@@ -200,7 +200,7 @@ def _outliers(args, ctx):
     k_usual = args.k if args.k is not None else t["k_usual"]
     k_fol = args.k_followers if args.k_followers is not None else t["k_followers"]
     outs, stats = find_outliers(reels, niche=args.niche, days=days, min_plays=args.min_plays if args.min_plays is not None else t["min_plays"],
-                                k_usual=k_usual, k_followers=k_fol, min_reels=t["min_reels_for_usual"], now=ctx["now"])
+                                k_usual=k_usual, k_followers=k_fol, min_reels=t["min_reels_for_usual"], usual_days=t.get("usual_days", 180), now=ctx["now"])
     return outs, stats, days, k_usual, k_fol
 
 

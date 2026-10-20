@@ -208,7 +208,7 @@ def decode_top(vault, topic: str, llm: LLM, vocab: dict, *, days: int = 7, top: 
     t = (settings or {}).get("outliers", {})
     reels = vault.reels()
     outs, stats = find_outliers(reels, niche=topic, days=days, min_plays=min_plays, k_usual=t.get("k_usual", 3.0),
-                                k_followers=t.get("k_followers", 5.0), min_reels=t.get("min_reels_for_usual", 5), now=now)
+                                k_followers=t.get("k_followers", 5.0), min_reels=t.get("min_reels_for_usual", 5), usual_days=t.get("usual_days", 180), now=now)
     chosen = outs[:top]
     tstats = ensure_transcripts([o.reel for o in chosen], transcriber)
     for o in chosen:

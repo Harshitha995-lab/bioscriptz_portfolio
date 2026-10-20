@@ -29,19 +29,24 @@ class Outlier:
         return self.basis == "own usual"
 
 
-def account_usuals(reels: list[Reel], min_reels: int = 5) -> dict[str, float]:
-    """Median plays per account over every Reel we hold for it, regardless of niche or date. Unknown accounts are never pooled."""
+def account_usuals(reels: list[Reel], min_reels: int = 5, *, now: datetime | None = None, days: int | None = None) -> dict[str, float]:
+    """Median plays per account over the Reels we hold for it, regardless of niche. Unknown accounts are never pooled.
+    With `days`, only Reels posted in that window count (undated ones are kept): a profile scrape can mix in old viral
+    posts from years ago, and those would inflate "usual" and hide today's winners."""
+    now = now or utcnow()
     plays: dict[str, list[int]] = {}
     for r in reels:
+        if days and r.posted_at and (now - r.posted_at).total_seconds() / 86400 > days:
+            continue
         if r.account and r.account != "unknown":
             plays.setdefault(r.account.lower(), []).append(r.plays)
     return {a: float(median(p)) for a, p in plays.items() if len(p) >= min_reels}
 
 
 def find_outliers(reels: list[Reel], *, niche: str | None = None, days: int = 30, min_plays: int = 1000, k_usual: float = 3.0,
-                  k_followers: float = 5.0, min_reels: int = 5, now: datetime | None = None) -> tuple[list[Outlier], dict]:
+                  k_followers: float = 5.0, min_reels: int = 5, usual_days: int | None = 180, now: datetime | None = None) -> tuple[list[Outlier], dict]:
     now = now or utcnow()
-    usuals = account_usuals(reels, min_reels)             # computed on everything, so the baseline is not biased by the filters below
+    usuals = account_usuals(reels, min_reels, now=now, days=usual_days)             # computed on everything, so the baseline is not biased by the filters below
     out, considered = [], 0
     pool = [r.plays for r in reels if r.plays > 0 and (not niche or r.niche.lower() == niche.lower())]
     batch_median = float(median(pool)) if len(pool) >= 10 else 0.0       # too few Reels make a meaningless "typical"

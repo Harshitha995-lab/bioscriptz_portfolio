@@ -216,3 +216,19 @@ class RealShape(unittest.TestCase):
         self.assertTrue(r.video_url.endswith("v1.mp4"))
         self.assertIsNone(r.followers)             # this actor gives no follower count
         self.assertEqual(r.transcript, "")         # nor a transcript: it must come from the video
+
+
+class ProfileShape(unittest.TestCase):
+    def test_maps_profile_items_and_old_posts_do_not_set_the_usual(self):
+        from datetime import timedelta
+        from scouts.common import Reel, utcnow
+        from scouts.outliers import account_usuals
+        data = json.loads((Path(__file__).parent.parent / "data" / "apify_profile_shape.json").read_text(encoding="utf-8"))
+        old, new = item_to_reel(data[0], source="creator"), item_to_reel(data[1], source="creator")
+        self.assertEqual((old.plays, old.account, old.posted_at.year), (1703661, "oohochy", 2022))
+        self.assertEqual(new.plays, 2856)
+        now = utcnow()
+        reels = [Reel(id=f"r{i}", url="u", account="oohochy", plays=3000, posted_at=now - timedelta(days=10 * i)) for i in range(1, 6)]
+        reels += [Reel(id=f"old{i}", url="u", account="oohochy", plays=1_700_000, posted_at=now - timedelta(days=1000 + i)) for i in range(6)]
+        self.assertEqual(account_usuals(reels, 5, now=now, days=180)["oohochy"], 3000.0)     # recent window only
+        self.assertGreater(account_usuals(reels, 5, now=now)["oohochy"], 100000)            # without the window the old viral posts win

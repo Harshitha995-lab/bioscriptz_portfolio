@@ -98,7 +98,8 @@
       "k_usual": 3.0,
       "k_followers": 5.0,
       "min_plays": 1000,
-      "min_reels_for_usual": 5
+      "min_reels_for_usual": 5,
+      "usual_days": 180
     },
     "analyse": {
       "top": 20,
