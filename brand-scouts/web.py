@@ -73,16 +73,25 @@ class App:
             return "price_per_1000_results_usd is not set in config/apify.json (copy it from the actor's Pricing tab)"
         return ""
 
-    def plan(self, topic: str) -> dict:
+    @staticmethod
+    def resolve(topic: str, brand_raw) -> tuple[str, dict | None, list[str]]:
+        """(topic key, brand details or None, search terms). In Brand mode the topic key is 'brand category'."""
+        if brand_raw:
+            brand = research.clean_brand(brand_raw)
+            return research.clean_topic(f"{brand['brand']} {brand['category']}"), brand, research.brand_keywords(brand["brand"], brand["category"])
         topic = research.clean_topic(topic)
+        return topic, None, research.default_keywords(topic)
+
+    def plan(self, topic: str, brand_raw=None) -> dict:
+        topic, brand, kws = self.resolve(topic, brand_raw)
         with self.vault() as v:
             spent = v.month_spend(self.now)
-        kws = research.default_keywords(topic)
         if self.sample:
-            return {"sample": True, "topic": topic, "keywords": kws, "est_cost": 0.0, "ok": True, "month_spent": spent,
+            return {"sample": True, "topic": topic, "keywords": kws, "brand": brand, "est_cost": 0.0, "ok": True, "month_spent": spent,
                     "message": "Sample mode: synthetic data, nothing is spent."}
         blocked = self.live_ready()
-        p = research.plan_run(kws, spent, self.apify_cfg().get("price_per_1000_results_usd"), self.max_run_usd).to_dict()
+        p = research.plan_run(kws, spent, self.apify_cfg().get("price_per_1000_results_usd"), self.max_run_usd,
+                              len(([brand["own"]] if brand and brand["own"] else []) + (brand["competitors"] if brand else []))).to_dict()
         if blocked:
             p.update(ok=False, message=blocked)
         return {**p, "sample": False, "topic": topic}
@@ -98,8 +107,8 @@ class App:
             return v.get_meta("research:" + slug(topic))
 
     # -- jobs
-    def start(self, topic: str, days: int, confirm: bool) -> str:
-        topic = research.clean_topic(topic)
+    def start(self, topic: str, days: int, confirm: bool, brand_raw=None) -> str:
+        topic, brand, _ = self.resolve(topic, brand_raw)
         if days not in (7, 14, 30):
             raise ValueError("Pick 7, 14 or 30 days.")
         if not self.sample and not confirm:
@@ -112,10 +121,10 @@ class App:
         job = {"id": job_id, "status": "running", "messages": [], "result": None, "error": ""}
         self.jobs[job_id] = job
         self.running = job_id
-        threading.Thread(target=self._run, args=(job, topic, days), daemon=True).start()
+        threading.Thread(target=self._run, args=(job, topic, days, brand), daemon=True).start()
         return job_id
 
-    def _run(self, job: dict, topic: str, days: int) -> None:
+    def _run(self, job: dict, topic: str, days: int, brand: dict | None = None) -> None:
         say = lambda m: job["messages"].append(m)
         try:
             now = self.now or utcnow()
@@ -129,22 +138,26 @@ class App:
                     reels = load_sample_reels(Niches(), now)
                     for r in reels:
                         r.niche = topic
+                    if brand:
+                        research.add_sample_audience(reels)
                     v.upsert_reels(reels, now)
                     say("Sample mode: loaded synthetic Reels (they are about personal branding, whatever topic you typed).")
                 else:
-                    keywords = research.expand_keywords(topic, self.get_llm("analysis"))
-                    plan = research.plan_run(keywords, v.month_spend(now), self.apify_cfg().get("price_per_1000_results_usd"), self.max_run_usd)
+                    keywords = research.brand_keywords(brand["brand"], brand["category"]) if brand else research.expand_keywords(topic, self.get_llm("analysis"))
+                    plan = research.plan_run(keywords, v.month_spend(now), self.apify_cfg().get("price_per_1000_results_usd"), self.max_run_usd,
+                                             len(([brand["own"]] if brand and brand["own"] else []) + (brand["competitors"] if brand else [])))
                     harvester = self.harvester
                     if harvester is None:
                         from scouts.instagram_harvest import harvest as harvester
-                    res = research.harvest_topic(v, topic, plan, self.apify_cfg(), os.environ.get("APIFY_TOKEN", ""), harvester, say, now)
+                    res = research.harvest_topic(v, topic, plan, self.apify_cfg(), os.environ.get("APIFY_TOKEN", ""), harvester, say, now,
+                                              priority_creators=([brand["own"]] if brand and brand["own"] else []) + (brand["competitors"] if brand else []))
                     say(f"Fetched {res['keyword_reels']} Reels and {res['baseline_reels']} baseline Reels. Cost about ${res['cost']:.2f}.")
                     frames, transcriber, warn = research.live_media() if self.harvester is None else (None, None, "")
                     if warn:
                         say(warn)
                 say("Finding outliers and decoding the top 10…")
                 out = research.decode_top(v, topic, self.get_llm("analysis"), vocab, days=days, frames=frames, transcriber=transcriber,
-                                          now=now, settings=self.settings["agent"])
+                                          now=now, settings=self.settings["agent"], brand=brand)
                 out["sample"] = self.sample
                 out["warning"] = warn
                 v.set_meta("research:" + slug(topic), out)
@@ -238,9 +251,9 @@ def make_handler(app: App, port: int):
                     raise ValueError("send a JSON object")
                 path = urlparse(self.path).path
                 if path == "/api/plan":
-                    return self._json(200, app.plan(str(body.get("topic", ""))))
+                    return self._json(200, app.plan(str(body.get("topic", "")), body.get("brand")))
                 if path == "/api/research":
-                    jid = app.start(str(body.get("topic", "")), int(body.get("days", 7)), body.get("confirm") is True)
+                    jid = app.start(str(body.get("topic", "")), int(body.get("days", 7)), body.get("confirm") is True, body.get("brand"))
                     return self._json(202, {"job": jid})
                 if path == "/api/script":
                     return self._json(200, app.script(str(body.get("topic", "")), str(body.get("reel_id", "")), str(body.get("my_topic", ""))))

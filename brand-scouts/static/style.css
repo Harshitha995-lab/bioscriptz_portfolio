@@ -36,3 +36,7 @@ dd q{font-style:italic}
 pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow-x:auto;font-size:.85rem}
 a{color:var(--acc)}
 @media (max-width:560px){dl{grid-template-columns:1fr}dt{margin-top:6px}}
+.modes{display:flex;gap:16px;margin-bottom:8px}.modes label{display:flex;gap:6px;align-items:center;font-weight:500;margin:0}.modes input{flex:none;padding:0}
+#brandFields{margin-bottom:10px}#brandFields .row{margin-bottom:8px}
+.bar{display:flex;align-items:center;gap:8px;margin:4px 0}.bar span.f{height:8px;background:var(--acc);border-radius:4px;display:inline-block}
+table{border-collapse:collapse;width:100%;font-size:.9rem}td,th{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left}

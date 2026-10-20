@@ -41,6 +41,38 @@ def default_keywords(topic: str) -> list[str]:
     return kws
 
 
+def brand_keywords(brand: str, category: str) -> list[str]:
+    """Searches aimed at one brand. The category separates a brand from the ordinary word (Minimalist the skincare brand vs minimalism)."""
+    b, c = brand.lower().strip(), category.lower().strip()
+    tag = re.sub(r"[^a-z0-9]", "", b)
+    kws = [f"{b} {c}", f"{b} review", f"{b} vs", f"{b} results", f"{c} {b}"]
+    if tag:
+        kws.insert(0, f"#{tag}{re.sub(r'[^a-z0-9]', '', c)}")
+    return list(dict.fromkeys(kws))
+
+
+HANDLE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
+
+
+def clean_brand(raw: dict) -> dict:
+    """Validate the Brand mode fields from the web form."""
+    def one(v, what, limit):
+        v = " ".join(str(v or "").split())
+        if not v or len(v) > limit or not all(ch.isprintable() for ch in v):
+            raise ValueError(f"{what} is required (up to {limit} characters).")
+        return v
+    brand, category = one(raw.get("brand"), "Brand name", 40), one(raw.get("category"), "Category", 40)
+
+    def handle(h):
+        h = str(h or "").strip().lstrip("@").lower()
+        if h and not HANDLE.match(h):
+            raise ValueError(f"'{h}' is not a valid Instagram handle.")
+        return h
+    own = handle(raw.get("own"))
+    comp = [handle(x) for x in (raw.get("competitors") or [])][:3]
+    return {"brand": brand, "category": category, "own": own, "competitors": [c for c in comp if c and c != own]}
+
+
 def expand_keywords(topic: str, llm: LLM | None) -> list[str]:
     """The fixed patterns above, plus up to 4 searches a model suggests. A model failure falls back to the fixed ones."""
     kws = default_keywords(topic)
@@ -76,14 +108,14 @@ class RunPlan:
         return self.__dict__.copy()
 
 
-def plan_run(keywords: list[str], month_spent: float, price: float | None, max_run_usd: float) -> RunPlan:
+def plan_run(keywords: list[str], month_spent: float, price: float | None, max_run_usd: float, extra_creators: int = 0) -> RunPlan:
     p = budget.ASSUMED_PRICE_PER_1000 if price is None else float(price)
     remaining = max(budget.FREE_CREDIT_USD - month_spent, 0.0)
     total = budget.affordable_results(min(remaining, max_run_usd + budget.RESERVE_USD), p)
     s1 = int(total * STAGE1_SHARE)
     per_kw = s1 // len(keywords) if keywords else 0
     s2 = total - per_kw * len(keywords)
-    n_cr = min(BASELINE_CREATORS, s2 // BASELINE_PER_CREATOR)
+    n_cr = min(BASELINE_CREATORS + extra_creators, s2 // BASELINE_PER_CREATOR)       # extras: the brand's own and competitor handles
     plan = budget.make_plan(len(keywords), n_cr, per_kw, BASELINE_PER_CREATOR if n_cr else 0, price)
     ok, _, msg = budget.check(plan, month_spent)
     if per_kw < 5:
@@ -203,7 +235,7 @@ def summarise(cards: list[dict]) -> dict:
 
 # ---------------------------------------------------------------------------- the run
 def decode_top(vault, topic: str, llm: LLM, vocab: dict, *, days: int = 7, top: int = 10, frames=None, transcriber=None,
-               min_plays: int = 1000, now=None, settings: dict | None = None) -> dict:
+               min_plays: int = 1000, now=None, settings: dict | None = None, brand: dict | None = None) -> dict:
     from .transcribe import ensure_transcripts
     t = (settings or {}).get("outliers", {})
     reels = vault.reels()
@@ -221,13 +253,18 @@ def decode_top(vault, topic: str, llm: LLM, vocab: dict, *, days: int = 7, top: 
     bds = {**cached, **fresh}
     cards = [decode(o, bds[o.reel.id]) for o in chosen]
     cards.sort(key=lambda c: (not c["strong"], -c["ratio"]))
-    return {"topic": topic, "days": days, "generated_at": (now or utcnow()).isoformat(), "stats": stats, "cards": cards,
+    audience = None
+    if brand is not None:
+        ignore = {w for w in re.split(r"\W+", (brand["brand"] + " " + brand["category"]).lower()) if w} | {re.sub(r"[^a-z0-9]", "", brand["brand"].lower())}
+        audience = audience_section(vault, topic, llm, ignore | {brand["own"], *brand["competitors"]} - {""})
+    return {"brand": brand, "audience": audience, "topic": topic, "days": days, "generated_at": (now or utcnow()).isoformat(), "stats": stats, "cards": cards,
             "summary": summarise(cards), "transcripts": tstats,
             "frames": any("frames" in b.evidence for b in bds.values() if not b.error),
             "undated": sum(1 for o in chosen if o.reel.posted_at is None)}
 
 
-def harvest_topic(vault, topic: str, plan: RunPlan, apify_cfg: dict, token: str, harvester, progress=lambda m: None, now=None) -> dict:
+def harvest_topic(vault, topic: str, plan: RunPlan, apify_cfg: dict, token: str, harvester, progress=lambda m: None, now=None,
+                  priority_creators: list[str] | None = None) -> dict:
     """Stage 1: keyword search. Stage 2: the best hits' creators' own recent Reels, so each has a 'usual'. Spend is recorded per stage."""
     now = now or utcnow()
     spent = {"stage1": 0.0, "stage2": 0.0}
@@ -245,8 +282,9 @@ def harvest_topic(vault, topic: str, plan: RunPlan, apify_cfg: dict, token: str,
     vault.record_run("topic-search", spent["stage1"], len(found),
                      f"{topic}; " + ("reported by Apify" if info.get("usage_usd") is not None else "ESTIMATED"), now)
     got2 = 0
-    if plan.baseline_creators and found:
-        creators = pick_baseline_creators(found, plan.baseline_creators)
+    if plan.baseline_creators and (found or priority_creators):
+        priority = [c.lower() for c in (priority_creators or [])]
+        creators = (priority + [c for c in pick_baseline_creators(found, plan.baseline_creators) if c.lower() not in priority])[:plan.baseline_creators]
         # the plan is re-checked against what is really left, because stage 1 may have cost more than estimated
         left = max(budget.FREE_CREDIT_USD - vault.month_spend(now), 0.0)
         affordable = budget.affordable_results(left, plan.price)
@@ -259,7 +297,10 @@ def harvest_topic(vault, topic: str, plan: RunPlan, apify_cfg: dict, token: str,
             except Exception as exc:        # e.g. the actor is blocked on profiles: keep stage 1, outliers will just be 'weak'
                 base, info2, note = [], {}, f"{type(exc).__name__}: {exc}"
                 progress("Creator baselines could not be fetched; outliers will be judged against follower count only.")
-            vault.upsert_reels(base, now)           # niche stays blank: they are a baseline, not candidates
+            for r in base:
+                if r.account.lower() in priority:
+                    r.niche = topic                    # the brand's and its competitors' own Reels are on-topic by definition
+            vault.upsert_reels(base, now)           # niche stays blank for everyone else: they are a baseline, not candidates
             got2 = len(base)
             spent["stage2"] = info2.get("usage_usd") if info2.get("usage_usd") is not None else got2 / 1000 * plan.price
             vault.record_run("topic-baseline", spent["stage2"], got2,
@@ -301,3 +342,24 @@ def compare_models(reels: list[Reel], llm_a: LLM, llm_b: LLM, vocab: dict, frame
         fields[name] = {"agree": same, "of": len(both)}
     return {"reels": len(reels), "both_ok": len(both), "failed_a": sum(bool(x.error) for x in a.values()),
             "failed_b": sum(bool(x.error) for x in b.values()), "fields": fields, "differences": diffs}
+
+
+SAMPLE_COMMENTS = ["How much does this cost? Is it worth it?", "Love this so much, best advice I have seen", "Where can I buy it? Need this!",
+                   "Tried something like this and it stopped working after a week", "Is it better than the other brand?", "wow", "Can you make a video on the basics?",
+                   "Honestly the price is too high for what you get"]
+
+
+def add_sample_audience(reels: list[Reel]) -> None:
+    """Synthetic comments and mentions so sample mode can show the audience section. Not real data."""
+    for i, r in enumerate(reels):
+        r.extras = {"comments": [SAMPLE_COMMENTS[(i + k) % len(SAMPLE_COMMENTS)] for k in range(3)], "mentions": ["sample_brand_x"] if i % 3 == 0 else [],
+                    "tagged": ["sample_rival_y"] if i % 4 == 0 else [], "hashtags": ["sample", "skincare" if i % 2 else "routine"]}
+
+
+def audience_section(vault, topic: str, llm: LLM, ignore: set[str]) -> dict:
+    from .customer import collect, mention_signals, voice_of_customer
+    reels = vault.reels(topic)
+    pairs = collect(reels)
+    out = {"reels": len(reels), "signals": mention_signals(reels, ignore)}
+    out["voice"] = voice_of_customer(llm, pairs) if pairs else {"comments": 0, "themes": [], "errors": [], "sorted": 0, "reactions": 0, "caveat": ""}
+    return out

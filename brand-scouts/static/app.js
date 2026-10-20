@@ -35,20 +35,33 @@ async function loadSaved(topic) {
   try { render(await api("/api/result?topic=" + encodeURIComponent(topic)), topic); } catch (e) { $("results").replaceChildren(el("p", { class: "small", text: "No saved result for that topic yet." })); }
 }
 
+const mode = () => document.querySelector('input[name="mode"]:checked').value;
+function brandPayload() {
+  if (mode() !== "brand") return null;
+  return { brand: $("brand").value.trim(), category: $("category").value.trim(), own: $("own").value.trim(),
+           competitors: $("competitors").value.split(",").map((s) => s.trim()).filter(Boolean) };
+}
+document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", () => {
+  const b = mode() === "brand";
+  $("brandFields").hidden = !b; $("topic").hidden = b; $("topicLabel").hidden = b; $("topic").required = !b;
+  $("topic").closest(".row").hidden = b;
+}));
+
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const topic = $("topic").value.trim(), days = Number($("days").value);
+  const brand = brandPayload();
+  const topic = brand ? `${brand.brand} ${brand.category}` : $("topic").value.trim(), days = Number($("days").value);
   $("results").replaceChildren(); $("progress").hidden = true;
   try {
-    const plan = await api("/api/plan", { topic });
-    if (plan.sample) return run(topic, days, false);
+    const plan = await api("/api/plan", { topic, brand });
+    if (plan.sample) return run(topic, days, false, brand);
     const box = $("plan"); box.hidden = false; box.replaceChildren();
     const inner = el("div", { class: "box" },
       el("b", { text: `Plan for “${plan.topic}”` }),
       el("p", { text: plan.message }),
       el("p", { class: "small", text: `${plan.keywords.length} search terms × ${plan.per_keyword} + ${plan.baseline_creators} creators × ${plan.per_creator} Reels. ` +
         `Estimated cost $${plan.est_cost.toFixed(2)} at $${plan.price.toFixed(2)} per 1,000 results${plan.price_assumed ? " (ASSUMED price)" : ""}. Month so far $${plan.month_spent.toFixed(2)} of $5.00.` }));
-    const go = el("button", { type: "button", text: `Run for about $${plan.est_cost.toFixed(2)}`, onclick: () => { box.hidden = true; run(topic, days, true); } });
+    const go = el("button", { type: "button", text: `Run for about $${plan.est_cost.toFixed(2)}`, onclick: () => { box.hidden = true; run(topic, days, true, brand); } });
     if (!plan.ok) go.disabled = true;
     inner.append(go, " ", el("button", { type: "button", class: "ghost", text: "Cancel", onclick: () => { box.hidden = true; } }));
     box.append(inner);
@@ -57,11 +70,11 @@ $("form").addEventListener("submit", async (e) => {
 
 function showError(msg) { $("progress").hidden = false; $("progress").replaceChildren(el("p", { class: "err", text: msg })); }
 
-async function run(topic, days, confirm) {
+async function run(topic, days, confirm, brand) {
   $("go").disabled = true;
   const prog = $("progress"); prog.hidden = false; prog.replaceChildren(el("p", { text: "Starting…" }));
   try {
-    const { job } = await api("/api/research", { topic, days, confirm });
+    const { job } = await api("/api/research", { topic, days, confirm, brand });
     for (;;) {
       await new Promise((r) => setTimeout(r, 1200));
       const j = await api("/api/job/" + job);
@@ -138,6 +151,35 @@ function render(res, topic) {
       el("p", { class: "small", text: s.note })));
   }
   res.cards.forEach((c, i) => r.append(card(c, i + 1, topic)));
+  if (res.audience) r.append(audience(res.audience));
+}
+
+function audience(a) {
+  const box = el("div", { class: "box" }, el("h2", { text: "What the audience says" }));
+  const v = a.voice;
+  if (!v.comments) { box.append(el("p", { class: "small", text: "No comments were returned for these Reels, so there is nothing to summarise." })); }
+  else {
+    box.append(el("p", { class: "small", text: `${v.comments} comments from ${a.reels} Reels (${v.sorted} sorted, ${v.reactions} too short to sort, like emoji).` }));
+    for (const t of v.themes.filter((x) => x.count)) {
+      const w = Math.max(4, Math.round(t.share * 200));
+      const fill = el("span", { class: "f" }); fill.style.width = w + "px";      // set through the DOM: the page's CSP blocks style attributes
+      box.append(el("div", { class: "bar" }, el("b", { text: t.theme }), fill, el("span", { text: `${t.count} (${Math.round(t.share * 100)}%)` })));
+      for (const ex of t.examples.slice(0, 2)) box.append(el("div", { class: "small" }, el("q", { text: ex.text })));
+    }
+    if (v.errors && v.errors.length) box.append(el("p", { class: "err small", text: "Some comments could not be sorted: " + v.errors[0] }));
+    box.append(el("p", { class: "small", text: v.caveat }));
+  }
+  const s = a.signals;
+  if (s.accounts.length || s.hashtags.length) {
+    box.append(el("h3", { text: "Mentioned alongside" }));
+    const tbl = el("table", {}, el("tr", {}, el("th", { text: "Accounts tagged or mentioned" }), el("th", { text: "Hashtags" })));
+    for (let i = 0; i < Math.max(s.accounts.length, s.hashtags.length); i++) {
+      const ac = s.accounts[i], hs = s.hashtags[i];
+      tbl.append(el("tr", {}, el("td", { text: ac ? `@${ac[0]} (${ac[1]} Reels)` : "" }), el("td", { text: hs ? `#${hs[0]} (${hs[1]})` : "" })));
+    }
+    box.append(tbl);
+  }
+  return box;
 }
 
 init();

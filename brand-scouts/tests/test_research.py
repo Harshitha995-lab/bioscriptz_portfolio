@@ -268,3 +268,88 @@ class Compare(unittest.TestCase):
         self.assertEqual(res["fields"]["story loop"], {"agree": 0, "of": 3})
         self.assertEqual(res["fields"]["spoken hook type"], {"agree": 3, "of": 3})
         self.assertEqual(len(res["differences"]), 3)       # only the loop differs; the contrarian hook fixes the angle
+
+
+class BrandMode(unittest.TestCase):
+    def test_brand_keywords_are_category_qualified(self):
+        kws = research.brand_keywords("Minimalist", "skincare")
+        self.assertIn("#minimalistskincare", kws)
+        self.assertNotIn("#minimalist", kws)                      # the bare word is mostly minimalism, not the brand
+        self.assertTrue(all("skincare" in k or k.startswith("minimalist ") for k in kws))
+
+    def test_clean_brand_validates(self):
+        ok = research.clean_brand({"brand": "Minimalist", "category": "skincare", "own": "@BeMinimalist", "competitors": ["deconstruct", "deconstruct", "a", "b", "c"]})
+        self.assertEqual(ok["own"], "beminimalist")
+        self.assertLessEqual(len(ok["competitors"]), 3)
+        for bad in ({"brand": "", "category": "x"}, {"brand": "x", "category": ""}, {"brand": "x", "category": "y", "own": "bad handle!"}):
+            with self.assertRaises(ValueError):
+                research.clean_brand(bad)
+
+    def test_priority_creators_fetched_first_and_tagged_on_topic(self):
+        v = Vault(":memory:")
+        fetched = []
+
+        def fake(keywords, cfg, token, max_reels, creators, **kw):
+            if keywords:
+                return [Reel(id="k1", url="u", account="someone", plays=9000, followers=2000, keyword="x", posted_at=NOW)], {"usage_usd": 0.1}
+            fetched.append(list(creators))
+            return [Reel(id=f"{c}{i}", url="u", account=c, plays=500, posted_at=NOW) for c in creators for i in range(2)], {"usage_usd": 0.01}
+        plan = research.plan_run(research.brand_keywords("Minimalist", "skincare"), 0.0, 2.7, 1.5, extra_creators=2)
+        research.harvest_topic(v, "minimalist skincare", plan, {}, "t", fake, now=NOW, priority_creators=["beminimalist", "deconstruct"])
+        self.assertEqual(fetched[0][:2], ["beminimalist", "deconstruct"])
+        self.assertLessEqual(len(fetched[0]), plan.baseline_creators)
+        self.assertEqual(v.get_reel("beminimalist0").niche, "minimalist skincare")
+        self.assertEqual(v.get_reel("someone" + "0").niche if v.get_reel("someone0") else "", "")        # others stay baseline only
+
+
+class Audience(unittest.TestCase):
+    def test_vault_keeps_extras_and_item_extras_maps_comments(self):
+        from scouts.instagram_harvest import item_extras
+        ex = item_extras({"latestComments": [{"text": "How much is it?"}, {"text": ""}], "mentions": ["BrandX"], "taggedUsers": [{"username": "Rival"}], "hashtags": ["SkinCare"]})
+        self.assertEqual(ex, {"comments": ["How much is it?"], "mentions": ["brandx"], "tagged": ["rival"], "hashtags": ["skincare"]})
+        v = Vault(":memory:")
+        v.upsert_reels([Reel(id="1", url="u", account="a", extras=ex)], NOW)
+        v.upsert_reels([Reel(id="1", url="u", account="a", plays=5)], NOW)          # a later scrape without extras must not erase them
+        self.assertEqual(v.get_reel("1").extras["comments"], ["How much is it?"])
+
+    def test_voice_counts_and_guards(self):
+        from scouts.customer import collect, mention_signals, voice_of_customer
+
+        class Odd:                      # returns an out-of-range index and an invented theme: both must be ignored
+            def complete_json(self, system, user, images=None):
+                n = len(json.loads(user)["comments"])
+                return {"labels": [{"i": 0, "theme": "praise"}, {"i": 1, "theme": "made-up"}, {"i": 999, "theme": "price"}]} if n else {"labels": []}
+        reels = [Reel(id="1", url="u", account="a", extras={"comments": ["Love this so much", "How much does it cost", "wow", "Love this so much"]})]
+        pairs = collect(reels)
+        self.assertEqual(len(pairs), 3)                                              # exact duplicate removed
+        out = voice_of_customer(Odd(), pairs)
+        self.assertEqual((out["sorted"], out["reactions"]), (1, 1))                  # "wow" is a reaction; only the valid label counts
+        self.assertEqual(out["themes"][0]["examples"][0]["text"], "Love this so much")      # verbatim stored comment
+        sig = mention_signals([Reel(id="1", url="u", account="owner", extras={"mentions": ["owner", "rival", "brandx"], "hashtags": ["brandx", "skin"]})], {"brandx"})
+        self.assertEqual(sig["accounts"], [("rival", 1)])
+        self.assertEqual(sig["hashtags"], [("skin", 1)])
+
+    def test_failed_model_call_is_reported_not_fatal(self):
+        from scouts.customer import voice_of_customer
+
+        class Boom:
+            def complete_json(self, *a, **k):
+                raise RuntimeError("down")
+        out = voice_of_customer(Boom(), [("1", "this is a long enough comment")])
+        self.assertEqual(out["sorted"], 0)
+        self.assertTrue(out["errors"])
+
+
+class BrandWeb(Web):
+    def test_brand_flow_returns_audience(self):
+        self.serve(web.App(self.dir / "v.db", True, now=NOW))
+        brand = {"brand": "Minimalist", "category": "skincare", "own": "beminimalist", "competitors": ["deconstruct"]}
+        code, plan = self.call("/api/plan", {"topic": "", "brand": brand})
+        self.assertEqual(code, 200)
+        code, j = self.call("/api/research", {"topic": "", "days": 30, "brand": brand})
+        done = self.wait(j["job"])
+        self.assertEqual((done["status"], done["error"]), ("done", ""))
+        res = done["result"]
+        self.assertEqual(res["topic"], "Minimalist skincare")
+        self.assertGreater(res["audience"]["voice"]["comments"], 0)
+        self.assertEqual(self.call("/api/plan", {"topic": "", "brand": {"brand": "", "category": "x"}})[0], 400)

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -51,6 +51,7 @@ class Reel:
     account_median_plays: Optional[float] = None
     video_url: str = ""            # direct video file, for frame extraction (Apify links can expire)
     duration_s: Optional[float] = None
+    extras: dict = field(default_factory=dict)   # comments, mentions, tagged accounts, hashtags: for audience research, not for ranking
     # derived by triage
     velocity: float = 0.0        # plays per day since posting
     reach_ratio: float = 0.0     # plays / max(followers, 1000)

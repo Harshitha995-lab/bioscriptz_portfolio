@@ -23,7 +23,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS reels (
   id TEXT PRIMARY KEY, account TEXT, url TEXT, caption TEXT, transcript TEXT, followers INTEGER,
   plays INTEGER, likes INTEGER, comments INTEGER, posted_at TEXT, keyword TEXT, niche TEXT, source TEXT,
-  video_url TEXT, duration_s REAL, first_seen TEXT, last_seen TEXT);
+  video_url TEXT, duration_s REAL, first_seen TEXT, last_seen TEXT, extras TEXT DEFAULT '');
 CREATE INDEX IF NOT EXISTS reels_account ON reels(account);
 CREATE INDEX IF NOT EXISTS reels_niche ON reels(niche);
 CREATE TABLE IF NOT EXISTS snapshots (id TEXT, seen TEXT, plays INTEGER, likes INTEGER, comments INTEGER);
@@ -60,6 +60,8 @@ class Vault:
         self.db = sqlite3.connect(self.path)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        if "extras" not in {c[1] for c in self.db.execute("PRAGMA table_info(reels)")}:      # vaults made before audience research
+            self.db.execute("ALTER TABLE reels ADD COLUMN extras TEXT DEFAULT ''")
 
     def __enter__(self):
         return self
@@ -80,8 +82,8 @@ class Vault:
                 exists = self.db.execute("SELECT 1 FROM reels WHERE id = ?", (r.id,)).fetchone()
                 self.db.execute(
                     """INSERT INTO reels (id, account, url, caption, transcript, followers, plays, likes, comments, posted_at, keyword,
-                                          niche, source, video_url, duration_s, first_seen, last_seen)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                                          niche, source, video_url, duration_s, first_seen, last_seen, extras)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                        ON CONFLICT(id) DO UPDATE SET
                          plays=excluded.plays, likes=excluded.likes, comments=excluded.comments, followers=COALESCE(excluded.followers, followers),
                          last_seen=excluded.last_seen,
@@ -90,9 +92,10 @@ class Vault:
                          niche=CASE WHEN excluded.niche != '' THEN excluded.niche ELSE niche END,
                          keyword=CASE WHEN excluded.keyword != '' THEN excluded.keyword ELSE keyword END,
                          video_url=CASE WHEN excluded.video_url != '' THEN excluded.video_url ELSE video_url END,
-                         duration_s=COALESCE(excluded.duration_s, duration_s)""",
+                         duration_s=COALESCE(excluded.duration_s, duration_s),
+                         extras=CASE WHEN excluded.extras != '' THEN excluded.extras ELSE extras END""",
                     (r.id, r.account, r.url, r.caption, r.transcript, r.followers, r.plays, r.likes, r.comments,
-                     r.posted_at.isoformat() if r.posted_at else None, r.keyword, r.niche, r.source, r.video_url, r.duration_s, now_s, now_s))
+                     r.posted_at.isoformat() if r.posted_at else None, r.keyword, r.niche, r.source, r.video_url, r.duration_s, now_s, now_s, json.dumps(r.extras) if r.extras else ""))
                 self.db.execute("INSERT INTO snapshots VALUES (?,?,?,?,?)", (r.id, now_s, r.plays, r.likes, r.comments))
                 new, updated = new + (not exists), updated + bool(exists)
         return new, updated
@@ -102,7 +105,8 @@ class Vault:
         return Reel(id=row["id"], url=row["url"] or "", account=row["account"] or "unknown", caption=row["caption"] or "",
                     transcript=row["transcript"] or "", followers=row["followers"], plays=row["plays"] or 0, likes=row["likes"] or 0,
                     comments=row["comments"] or 0, posted_at=parse_datetime(row["posted_at"]), source=row["source"] or "",
-                    keyword=row["keyword"] or "", niche=row["niche"] or "", video_url=row["video_url"] or "", duration_s=row["duration_s"])
+                    keyword=row["keyword"] or "", niche=row["niche"] or "", video_url=row["video_url"] or "", duration_s=row["duration_s"],
+                    extras=json.loads(row["extras"]) if row["extras"] else {})
 
     def reels(self, niche: str | None = None) -> list[Reel]:
         sql, args = "SELECT * FROM reels", ()

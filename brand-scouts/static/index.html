@@ -14,7 +14,22 @@
 </header>
 <main>
   <form id="form" autocomplete="off">
-    <label for="topic">Topic</label>
+    <div class="modes" role="tablist">
+      <label><input type="radio" name="mode" value="topic" checked> Topic</label>
+      <label><input type="radio" name="mode" value="brand"> Brand</label>
+    </div>
+    <div id="brandFields" hidden>
+      <div class="row">
+        <input id="brand" maxlength="40" placeholder="Brand name, e.g. Minimalist">
+        <input id="category" maxlength="40" placeholder="Category, e.g. skincare">
+      </div>
+      <div class="row">
+        <input id="own" maxlength="31" placeholder="Brand's Instagram handle (optional)">
+        <input id="competitors" maxlength="100" placeholder="Up to 3 competitor handles, comma separated (optional)">
+      </div>
+      <p class="small">The category tells the app which meaning you want: "Minimalist" the skincare brand, not minimalism.</p>
+    </div>
+    <label for="topic" id="topicLabel">Topic</label>
     <div class="row">
       <input id="topic" maxlength="60" placeholder="e.g. personal branding, daily cosmetics" required>
       <select id="days" aria-label="Time window">

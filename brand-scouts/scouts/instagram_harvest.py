@@ -63,6 +63,20 @@ def to_float(value) -> float | None:
         return None
 
 
+def item_extras(item: dict) -> dict:
+    """What the audience said and who was mentioned. Kept small: up to 20 comments of 300 characters."""
+    def names(key):
+        return [str(x.get("username") if isinstance(x, dict) else x).lower() for x in (item.get(key) or []) if x][:20]
+    comments = []
+    for c in item.get("latestComments") or []:
+        t = str((c.get("text") if isinstance(c, dict) else c) or "").strip()
+        if t:
+            comments.append(t[:300])
+    out = {"comments": comments[:20], "mentions": names("mentions"), "tagged": names("taggedUsers"),
+           "hashtags": [str(h).lower() for h in (item.get("hashtags") or [])][:30]}
+    return {k: v for k, v in out.items() if v}
+
+
 def item_to_reel(item: dict, field_map: dict | None = None, source: str = "") -> Reel | None:
     fm = {**FIELD_CANDIDATES, **(field_map or {})}
     rid, url = first(item, fm["id"]), first(item, fm["url"])
@@ -73,6 +87,7 @@ def item_to_reel(item: dict, field_map: dict | None = None, source: str = "") ->
     followers = first(item, fm["followers"])
     caption = first(item, fm["caption"])
     transcript = first(item, fm["transcript"])
+    extras = item_extras(item)
     return Reel(
         id=rid,
         url=url,
@@ -88,6 +103,7 @@ def item_to_reel(item: dict, field_map: dict | None = None, source: str = "") ->
         video_url=str(first(item, fm["video"]) or ""),
         duration_s=to_float(first(item, fm["duration"])),
         source=source,
+        extras=extras,
     )
 
 

@@ -20,6 +20,8 @@ IRRELEVANT = ("logo design", "giveaway", "workout")
 class FakeLLM:
     def complete_json(self, system: str, user: str, images=None) -> dict:
         data = json.loads(user)
+        if "[TASK:voc]" in system:
+            return {"labels": [{"i": c["i"], "theme": self._theme(c["text"])} for c in data["comments"]]}
         if "[TASK:label]" in system:
             return {"labels": [self._label(r) for r in data["reels"]]}
         if "[TASK:brand]" in system:
@@ -114,6 +116,17 @@ class FakeLLM:
                 "beats": out, "caption": "[sample caption]", "hashtags": ["#personalbranding"],
                 "cta": {"type": "comment-keyword", "text": "[Comment YOUR KEYWORD and I will send it]"},
                 "needs_from_you": ["[your lead magnet name]"]}
+
+    @staticmethod
+    def _theme(text: str) -> str:
+        low = text.lower()
+        for theme, pattern in (("price", r"how much|price|cost|expensive|cheap|worth it|₹|\$"), ("comparison", r"\bvs\b|better than|compared|instead of"),
+                               ("purchase-intent", r"where (can|do) i (buy|get)|link|i need this|take my money|ordering|\border\b"),
+                               ("complaint", r"not working|broke|worst|disappoint|rash|breakout|fake|waste|stopped working"),
+                               ("question", r"\?"), ("praise", r"love|great|amazing|best|awesome|helpful|good")):
+            if re.search(pattern, low):
+                return theme
+        return "other"
 
     def _label(self, reel: dict) -> dict:
         text = f"{reel['caption']}\n{reel['transcript']}"

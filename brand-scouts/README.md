@@ -215,3 +215,6 @@ hook (spoken / on-screen / visual) · content angle · creator · rate of revela
 
 ### Which model?
 `config/settings.json` → `models` sets the model per task (`analysis`, `scripts`); `ANTHROPIC_MODEL_ANALYSIS` / `ANTHROPIC_MODEL_SCRIPTS` override it. Both default to `claude-sonnet-5-5` until you have compared. To compare on your own data: `python3 agent.py compare-models --a claude-haiku-5-5 --b claude-sonnet-5-5 --n 10` runs the same stored Reels through both and lists every disagreement for you to judge.
+
+### Brand mode and audience section
+In the web app choose **Brand**: enter the brand, its category (so "Minimalist" means the skincare brand, not minimalism), optionally its Instagram handle and up to 3 competitor handles. It searches category-qualified terms, fetches the brand's and competitors' own recent Reels first, and adds **What the audience says**: comments sorted into question / complaint / praise / price / comparison / purchase-intent, plus accounts and hashtags mentioned alongside. Counting is done in code, examples are verbatim comments. Limits: only the few comments per Reel the scraper returns, skewed to strong feelings, including the creator's own replies. It is not market, product or pricing research; those need other data sources that are not connected. Sample mode uses synthetic comments.
