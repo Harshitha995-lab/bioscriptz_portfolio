@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outlier Research</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>Outlier Research</h1>
+  <p class="sub">Type any topic. Get the top outlier Reels of the last few days, decoded: hook, angle, creator, pace, CTA, link.</p>
+  <div id="banner" hidden></div>
+</header>
+<main>
+  <form id="form" autocomplete="off">
+    <label for="topic">Topic</label>
+    <div class="row">
+      <input id="topic" maxlength="60" placeholder="e.g. personal branding, daily cosmetics" required>
+      <select id="days" aria-label="Time window">
+        <option value="7">Last 7 days</option>
+        <option value="14">Last 14 days</option>
+        <option value="30">Last 30 days</option>
+      </select>
+      <button id="go" type="submit">Find outliers</button>
+    </div>
+    <div id="recent" class="chips"></div>
+  </form>
+  <section id="plan" hidden></section>
+  <section id="progress" hidden></section>
+  <section id="results"></section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

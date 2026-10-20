@@ -196,3 +196,22 @@ Nothing here has been run against real Apify, Instagram or Anthropic yet; it is 
 5. `agent.py harvest --dry-run` shows how the budget splits; the real run refuses if it would not fit (exit 3) and passes a per-run spend cap to Apify. Reels are stored in `data/vault.db`, so analysing them again costs nothing.
 
 Not built: DNA Playbook, weekly email, platforms other than Instagram.
+
+---
+
+## Web app: type a topic, get the top outliers decoded (`web.py`)
+
+    python3 web.py --sample     # offline demo at http://127.0.0.1:8000, synthetic data, no spend
+    python3 web.py              # live
+
+Enter any topic (personal branding, daily cosmetics, …) and a window (7, 14 or 30 days). It builds search terms, harvests inside the free-plan budget, also fetches the best hits' creators' own recent Reels (so each creator has a "usual" to be an outlier against), then decodes the **top 10** outliers:
+
+hook (spoken / on-screen / visual) · content angle · creator · rate of revelation (new-information beats per 10 s, from the video length or the transcript length) · super hook (all three hooks present and aligned) · contrarian take · call to action · link. Each card can be turned into your own script, saved to the vault.
+
+- A live run shows its estimated cost and needs a click to confirm; one run at a time; default cap $1.50 per topic (`--max-run-usd`), so about three topics fit in the $5 free credit.
+- Content angle, rate of revelation, super hook and contrarian are computed in code from the breakdown, not asked of the model. Anything that needs video frames (on-screen text, visual hook, super hook) says "unknown" without ffmpeg rather than guessing.
+- Not verified live. In sample mode every topic shows synthetic personal-branding Reels.
+- Binds to 127.0.0.1 only and rejects foreign Host/Origin headers (the server can spend money). Don't expose it to the internet.
+
+### Which model?
+`config/settings.json` → `models` sets the model per task (`analysis`, `scripts`); `ANTHROPIC_MODEL_ANALYSIS` / `ANTHROPIC_MODEL_SCRIPTS` override it. Both default to `claude-sonnet-5-5` until you have compared. To compare on your own data: `python3 agent.py compare-models --a claude-haiku-5-5 --b claude-sonnet-5-5 --n 10` runs the same stored Reels through both and lists every disagreement for you to judge.

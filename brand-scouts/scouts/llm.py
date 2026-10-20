@@ -47,3 +47,9 @@ class AnthropicLLM:
             messages=[{"role": "user", "content": content if images else user}],
         )
         return parse_json("".join(b.text for b in msg.content if b.type == "text"))
+
+
+def model_for(task: str, settings: dict | None = None) -> str:
+    """Model for a task ('analysis' or 'scripts'): ANTHROPIC_MODEL_<TASK> env, then settings.json "models", then ANTHROPIC_MODEL, then the default."""
+    return (os.environ.get(f"ANTHROPIC_MODEL_{task.upper()}") or ((settings or {}).get("models") or {}).get(task)
+            or os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-5-5")

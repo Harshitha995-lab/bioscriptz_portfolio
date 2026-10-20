@@ -61,6 +61,12 @@ class Vault:
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
     def close(self) -> None:
         self.db.close()
 

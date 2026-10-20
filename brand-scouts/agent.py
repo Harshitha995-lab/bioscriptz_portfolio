@@ -247,6 +247,30 @@ def cmd_analyse(args, ctx) -> int:
     return 0
 
 
+def cmd_compare(args, ctx) -> int:
+    from scouts import research
+    from scouts.viral_analysis import load_vocab
+    reels = [r for r in ctx["vault"].reels(args.niche) if r.transcript][: args.n]
+    if len(reels) < 3:
+        raise UsageError("Need at least 3 stored Reels with transcripts to compare models. Run harvest/analyse first.")
+    if ctx["sample"]:
+        from scouts.fake_llm import FakeLLM
+        a = b = FakeLLM()
+    else:
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise UsageError("ANTHROPIC_API_KEY is missing. Put it in .env (see .env.example).")
+        from scouts.llm import AnthropicLLM
+        a, b = AnthropicLLM(args.a), AnthropicLLM(args.b)
+    res = research.compare_models(reels, a, b, load_vocab())
+    print(("[sample: the same stand-in analyst is used for both, so this always agrees] " if ctx["sample"] else "") + f"{res['both_ok']} of {res['reels']} Reels analysed by both ({args.a} vs {args.b}); failures {res['failed_a']} / {res['failed_b']}.")
+    for k, v in res["fields"].items():
+        print(f"  {k:<22} agree on {v['agree']}/{v['of']}")
+    for d in res["differences"][:15]:
+        print(f"  DIFF {d['field']}: {d['a']!r} vs {d['b']!r}  {d['reel']}")
+    print("Agreement is not accuracy. Read the DIFF Reels yourself: whichever model is right on those decides which to use.")
+    return 0
+
+
 def cmd_script(args, ctx) -> int:
     from scouts.agent_script import write_one
     from scouts.angles import load_angles
@@ -363,6 +387,12 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "analyse":
             p.add_argument("--top", type=int)
 
+    c = sub.add_parser("compare-models", help="run the same stored Reels through two models and show where they disagree")
+    c.add_argument("--a", default="claude-haiku-5-5")
+    c.add_argument("--b", default="claude-sonnet-5-5")
+    c.add_argument("--n", type=int, default=10)
+    c.add_argument("--niche")
+
     s = sub.add_parser("script", help="step 4: write a script, or remix a Reel's structure")
     s.add_argument("--topic", required=True)
     s.add_argument("--niche")
@@ -418,10 +448,10 @@ def main(argv=None, *, harvester=None, llm=None, niches_path=None, now=None) -> 
             else:
                 if not os.environ.get("ANTHROPIC_API_KEY"):
                     raise UsageError("ANTHROPIC_API_KEY is missing. Put it in .env (see .env.example).")
-                from scouts.llm import AnthropicLLM
-                ctx["llm"] = AnthropicLLM()
+                from scouts.llm import AnthropicLLM, model_for
+                ctx["llm"] = AnthropicLLM(model_for("scripts" if args.cmd == "script" else "analysis", ctx["settings"]))
         handler = {"harvest": cmd_harvest, "usage": cmd_usage, "outliers": cmd_outliers, "analyse": cmd_analyse,
-                   "script": cmd_script, "vault": cmd_vault}[args.cmd]
+                   "script": cmd_script, "compare-models": cmd_compare, "vault": cmd_vault}[args.cmd]
         return handler(args, ctx)
     except UsageError as exc:
         print(f"Error: {exc}", file=sys.stderr)
