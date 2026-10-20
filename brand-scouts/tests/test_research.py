@@ -374,3 +374,21 @@ class BrandWeb(Web):
         self.assertEqual(res["topic"], "Minimalist skincare")
         self.assertGreater(res["audience"]["voice"]["comments"], 0)
         self.assertEqual(self.call("/api/plan", {"topic": "", "brand": {"brand": "", "category": "x"}})[0], 400)
+
+
+class PortGuard(unittest.TestCase):
+    def test_second_copy_cannot_share_a_port(self):
+        app = web.App(Path(tempfile.mkdtemp()) / "v.db", True)
+        first = web.serve(app, 0)
+        self.addCleanup(first.server_close)
+        with self.assertRaises(OSError):
+            web.serve(app, first.server_address[1])
+
+    def test_state_reports_the_ai_provider(self):
+        import os
+        old = os.environ.get("LLM_PROVIDER")
+        self.addCleanup(lambda: os.environ.pop("LLM_PROVIDER", None) if old is None else os.environ.__setitem__("LLM_PROVIDER", old))
+        os.environ["LLM_PROVIDER"] = "gemini"
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d)
+        self.assertEqual(web.App(d / "v.db", True).state()["ai"], "gemini")

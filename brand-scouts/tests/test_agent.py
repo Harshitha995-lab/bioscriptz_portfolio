@@ -302,3 +302,20 @@ class GeminiTests(unittest.TestCase):
         os.environ["LLM_PROVIDER"] = "openai"
         with self.assertRaises(ValueError):
             L.provider()
+
+    def test_web_app_builds_gemini_when_provider_is_gemini(self):
+        import os, shutil, tempfile
+        from pathlib import Path
+        import web
+        from scouts.llm import GeminiLLM
+        self.install_fake([])
+        saved = {k: os.environ.get(k) for k in ("LLM_PROVIDER", "GEMINI_API_KEY")}
+
+        def restore():
+            for k, v in saved.items():
+                os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+        self.addCleanup(restore)
+        os.environ.update(LLM_PROVIDER="gemini", GEMINI_API_KEY="k")
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d)
+        self.assertIsInstance(web.App(d / "v.db", False).get_llm("analysis"), GeminiLLM)

@@ -26,7 +26,7 @@ async function init() {
   const b = $("banner");
   if (state.sample) { b.hidden = false; b.className = "note"; b.textContent = "SAMPLE MODE: synthetic Reels about personal branding are shown whatever topic you type. Nothing is scraped and nothing is spent."; }
   else if (state.setup_issue) { b.hidden = false; b.className = "note"; b.textContent = "Setup needed before a live run: " + state.setup_issue; }
-  else { b.hidden = false; b.className = "note"; b.textContent = `Live mode. Recorded Apify spend this month: $${state.month_spent.toFixed(2)} of $${state.free_credit.toFixed(2)} free credit.`; }
+  else { b.hidden = false; b.className = "note"; b.textContent = `Live mode. AI: ${state.ai}. Recorded Apify spend this month: $${state.month_spent.toFixed(2)} of $${state.free_credit.toFixed(2)} free credit.`; }
   const chips = $("recent"); chips.replaceChildren();
   for (const t of state.topics || []) chips.append(el("button", { type: "button", text: t.topic, onclick: () => { $("topic").value = t.topic; loadSaved(t.topic); } }));
 }

@@ -115,7 +115,12 @@ class App:
     # -- state
     def state(self) -> dict:
         with self.vault() as v:
-            return {"sample": self.sample, "month_spent": round(v.month_spend(self.now), 2), "free_credit": 5.0,
+            from scouts.llm import provider
+            try:
+                ai = provider()
+            except ValueError:
+                ai = "invalid"
+            return {"sample": self.sample, "ai": ai, "month_spent": round(v.month_spend(self.now), 2), "free_credit": 5.0,
                     "topics": v.get_meta("topics", []), "setup_issue": self.live_ready()}
 
     def saved(self, topic: str) -> dict | None:
@@ -292,8 +297,14 @@ def make_handler(app: App, port: int):
     return Handler
 
 
+class Server(ThreadingHTTPServer):
+    # On Windows, address reuse lets a second copy bind a port that a first copy is still serving, and the OLD copy keeps
+    # answering the browser (with its old settings). Refuse instead, so there is never a hidden second copy.
+    allow_reuse_address = os.name != "nt"
+
+
 def serve(app: App, port: int) -> ThreadingHTTPServer:
-    return ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, port))
+    return Server(("127.0.0.1", port), make_handler(app, port))
 
 
 def main(argv=None) -> int:
@@ -306,9 +317,21 @@ def main(argv=None) -> int:
     load_env()
     path = Path(args.vault) if args.vault else ROOT / "data" / ("sample_vault.db" if args.sample else "vault.db")
     app = App(path, args.sample, max_run_usd=args.max_run_usd)
-    print(f"Open http://127.0.0.1:{args.port}   ({'SAMPLE mode, synthetic data' if args.sample else 'LIVE mode'})")
     try:
-        serve(app, args.port).serve_forever()
+        server = serve(app, args.port)
+    except OSError:
+        print(f"Port {args.port} is already in use. Another copy of this app is probably still running in another PowerShell window.\n"
+              f"Close that window (or press Ctrl+C in it), then start this again. Or use a different port: web.py --port {args.port + 1}")
+        return 1
+    from scouts.llm import provider
+    try:
+        ai = provider()
+    except ValueError as exc:
+        print(exc)
+        return 1
+    print(f"Open http://127.0.0.1:{args.port}   ({'SAMPLE mode, synthetic data' if args.sample else 'LIVE mode'}, AI: {'sample stand-in' if args.sample else ai})")
+    try:
+        server.serve_forever()
     except KeyboardInterrupt:
         pass
     return 0
