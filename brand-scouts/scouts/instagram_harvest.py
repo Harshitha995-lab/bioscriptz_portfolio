@@ -297,3 +297,46 @@ def harvest_profiles(usernames: list[str], cfg: dict, token: str, per_account: i
     reels, meta = _run_actor(ApifyClient(token), cfg["profile_actor_id"], run_input, cfg.get("field_map"), "followup", None)
     meta.pop("raw_sample", None)
     return reels, meta
+
+
+def harvest_creators(queries: list[str], cfg: dict, token: str, per_query: int = 10, run_cap_usd: float | None = None) -> tuple[list[dict], dict]:
+    """Instagram user search: one run per query. Each result is a profile (followers, bio) that already carries its latest posts,
+    so finding creators and reading their recent Reels is one charge per creator. Returns profiles de-duplicated by username."""
+    queries = [q.strip() for q in queries if q.strip()]
+    if not queries:
+        return [], {"items": 0, "runs": 0, "usage_usd": None}
+    actor = cfg.get("profile_actor_id") or cfg.get("actor_id", "REPLACE_ME")
+    if actor == "REPLACE_ME":
+        raise RuntimeError("Set actor_id in config/apify.json before a live run.")
+    from apify_client import ApifyClient
+
+    client = ApifyClient(token)
+
+    def one(q):
+        run_input = {"addParentData": False, "search": q, "searchType": "user", "searchLimit": per_query, "resultsType": "details"}
+        run = _call(client.actor(actor), run_input, run_cap_usd)
+        if not run:
+            raise RuntimeError(f"Apify run for {actor} returned nothing; check the run in the Apify console.")
+        dataset_id = run_field(run, "defaultDatasetId", "default_dataset_id")
+        if not dataset_id:
+            raise RuntimeError(f"Apify run for {actor} gave no dataset id; check the run in the Apify console.")
+        usage = run_field(run, "usageTotalUsd", "usage_total_usd")
+        try:
+            usage = float(usage) if usage is not None else None
+        except (TypeError, ValueError):
+            usage = None
+        return [dict(i) for i in client.dataset(dataset_id).iterate_items()], usage
+
+    with ThreadPoolExecutor(max_workers=cfg.get("parallel_runs", 4)) as pool:
+        outcomes = list(pool.map(one, queries))
+    seen: dict[str, dict] = {}
+    items, usage = 0, None
+    for got, u in outcomes:
+        items += len(got)
+        if u is not None:
+            usage = (usage or 0.0) + u
+        for p in got:
+            name = str(p.get("username") or "").lower()
+            if name and name not in seen:
+                seen[name] = p
+    return list(seen.values()), {"items": items, "runs": len(queries), "usage_usd": usage}

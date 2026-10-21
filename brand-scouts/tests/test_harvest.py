@@ -94,6 +94,19 @@ class LiveGlueTests(unittest.TestCase):
     CFG = {"actor_id": "me/actor", "input_template": {"hashtags": "{hashtags}", "searchTerms": "{terms}", "resultsLimit": 30},
            "profile_actor_id": "profile/actor", "profile_input_template": {"usernames": "{usernames}", "resultsLimit": 12}}
 
+    def test_creator_search_input_and_dedupe(self):
+        from scouts.instagram_harvest import harvest_creators
+        old = list(self.PROFILE_ITEMS)
+        self.addCleanup(lambda: self.PROFILE_ITEMS.__setitem__(slice(None), old))
+        self.PROFILE_ITEMS[:] = [{"username": "Jo", "followersCount": 5}, {"username": "jo"}, {"username": "al"}, {"nousername": 1}]
+        profiles, info = harvest_creators(["q one", "q two", " "], self.CFG, "TOKEN", per_query=7)
+        self.assertEqual(sorted(p["username"].lower() for p in profiles), ["al", "jo"])
+        self.assertEqual(info["runs"], 2)
+        self.assertEqual(sorted(r[1]["search"] for r in self.calls["runs"]), ["q one", "q two"])
+        self.assertEqual(self.calls["runs"][0][0], "profile/actor")
+        self.assertEqual({k: v for k, v in self.calls["runs"][0][1].items() if k != "search"},
+                         {"addParentData": False, "searchType": "user", "searchLimit": 7, "resultsType": "details"})
+
     def test_keywords_only(self):
         from scouts.instagram_harvest import harvest
         reels, info = harvest(["#tag", "a term"], self.CFG, "TOKEN")

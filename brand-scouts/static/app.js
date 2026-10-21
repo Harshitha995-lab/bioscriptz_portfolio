@@ -36,6 +36,7 @@ async function loadSaved(topic) {
 }
 
 const mode = () => document.querySelector('input[name="mode"]:checked').value;
+const isCreators = () => mode() === "creators";
 function brandPayload() {
   if (mode() !== "brand") return null;
   return { brand: $("brand").value.trim(), category: $("category").value.trim(), own: $("own").value.trim(),
@@ -43,6 +44,7 @@ function brandPayload() {
 }
 document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", () => {
   const b = mode() === "brand";
+  $("go").textContent = isCreators() ? "Find creators" : "Find outliers";
   $("brandFields").hidden = !b; $("topic").hidden = b; $("topicLabel").hidden = b; $("topic").required = !b;
   $("topic").closest(".row").hidden = b;
 }));
@@ -53,13 +55,13 @@ $("form").addEventListener("submit", async (e) => {
   const topic = brand ? `${brand.brand} ${brand.category}` : $("topic").value.trim(), days = Number($("days").value);
   $("results").replaceChildren(); $("progress").hidden = true;
   try {
-    const plan = await api("/api/plan", { topic, brand });
+    const plan = await api("/api/plan", { topic, brand, creators: isCreators() });
     if (plan.sample) return run(topic, days, false, brand);
     const box = $("plan"); box.hidden = false; box.replaceChildren();
     const inner = el("div", { class: "box" },
       el("b", { text: `Plan for “${plan.topic}”` }),
       el("p", { text: plan.message }),
-      el("p", { class: "small", text: `${plan.keywords.length} search terms × ${plan.per_keyword} + ${plan.baseline_creators} creators × ${plan.per_creator} Reels. ` +
+      el("p", { class: "small", text: (plan.creators ? `${plan.keywords.length} creator searches × up to ${plan.per_keyword} creators, each with their latest Reels. ` : `${plan.keywords.length} search terms × ${plan.per_keyword} + ${plan.baseline_creators} creators × ${plan.per_creator} Reels. `) +
         `Estimated cost $${plan.est_cost.toFixed(2)} at $${plan.price.toFixed(2)} per 1,000 results${plan.price_assumed ? " (ASSUMED price)" : ""}. Month so far $${plan.month_spent.toFixed(2)} of $5.00.` }));
     const go = el("button", { type: "button", text: `Run for about $${plan.est_cost.toFixed(2)}`, onclick: () => { box.hidden = true; run(topic, days, true, brand); } });
     if (!plan.ok) go.disabled = true;
@@ -78,7 +80,7 @@ async function run(topic, days, confirm, brand, reuse) {
   $("go").disabled = true;
   const prog = $("progress"); prog.hidden = false; prog.replaceChildren(el("p", { text: "Starting…" }));
   try {
-    const { job } = await api("/api/research", { topic, days, confirm, brand, reuse: reuse === true });
+    const { job } = await api("/api/research", { topic, days, confirm, brand, reuse: reuse === true, creators: isCreators() });
     for (;;) {
       await new Promise((r) => setTimeout(r, 1200));
       const j = await api("/api/job/" + job);
@@ -137,6 +139,7 @@ function scriptBox(c, topic) {
 function render(res, topic) {
   const r = $("results"); r.replaceChildren();
   const s = res.summary;
+  if (res.creator_board) r.append(creatorBoard(res.creator_board));
   r.append(el("h2", { text: `Top outliers for “${res.topic}” — last ${res.days} days` }));
   if (res.sample) r.append(el("div", { class: "note", text: "SAMPLE: synthetic data and a rule-based stand-in analyst. This shows the layout, not real findings." }));
   if (res.warning) r.append(el("div", { class: "note", text: res.warning }));
@@ -154,8 +157,22 @@ function render(res, topic) {
         el("div", {}, el("b", { text: s.median_rate == null ? "?" : String(s.median_rate) }), el("span", { text: "median reveals / 10s" }))),
       el("p", { class: "small", text: s.note })));
   }
-  res.cards.forEach((c, i) => r.append(card(c, i + 1, topic)));
+  res.cards.forEach((c, i) => r.append(card(c, i + 1, res.topic)));
   if (res.audience) r.append(audience(res.audience));
+}
+
+function creatorBoard(b) {
+  const box = el("div", { class: "box" }, el("h2", { text: "Top creators" }));
+  if (!b.creators.length) return el("div", { class: "box" }, el("h2", { text: "Top creators" }), el("p", { class: "small", text: "No creator had 3 or more recent Reels." }));
+  box.append(el("p", { class: "small", text: `${b.found} creators had enough Reels (micro ${b.tiers.micro}, small ${b.tiers.small}, big ${b.tiers.big}). Micro under 10k followers, small under 100k, big above.` }));
+  const tbl = el("table", {}, el("tr", {}, ...["Creator", "Size", "Followers", "Usual plays", "Best Reel", "Plays per follower"].map((h) => el("th", { text: h }))));
+  for (const c of b.creators) {
+    tbl.append(el("tr", {}, el("td", { text: "@" + c.username }), el("td", { text: c.tier }), el("td", { text: c.followers ? fmt(c.followers) : "?" }),
+      el("td", { text: fmt(c.median_plays) }), el("td", {}, LINK_OK.test(c.best_link) ? el("a", { href: c.best_link, target: "_blank", rel: "noopener noreferrer", text: fmt(c.best_plays) + " plays" }) : fmt(c.best_plays)),
+      el("td", { text: c.reach == null ? "?" : c.reach + "×" })));
+  }
+  box.append(tbl, el("p", { class: "small", text: b.note }));
+  return box;
 }
 
 function audience(a) {

@@ -33,8 +33,9 @@ def slug(topic: str) -> str:
 
 
 class App:
-    def __init__(self, vault_path: Path, sample: bool, harvester=None, llm=None, now=None, max_run_usd: float = 1.5):
+    def __init__(self, vault_path: Path, sample: bool, harvester=None, llm=None, now=None, max_run_usd: float = 1.5, discoverer=None):
         self.vault_path, self.sample, self.harvester, self.llm, self.now = vault_path, sample, harvester, llm, now
+        self.discoverer = discoverer
         self.max_run_usd = max_run_usd
         self.settings = load_json(ROOT / "config" / "settings.json")
         self.jobs: dict[str, dict] = {}
@@ -79,16 +80,18 @@ class App:
         return ""
 
     @staticmethod
-    def resolve(topic: str, brand_raw) -> tuple[str, dict | None, list[str]]:
+    def resolve(topic: str, brand_raw, creators: bool = False) -> tuple[str, dict | None, list[str]]:
         """(topic key, brand details or None, search terms). In Brand mode the topic key is 'brand category'."""
         if brand_raw:
             brand = research.clean_brand(brand_raw)
             return research.clean_topic(f"{brand['brand']} {brand['category']}"), brand, research.brand_keywords(brand["brand"], brand["category"])
         topic = research.clean_topic(topic)
+        if creators:
+            return f"{topic} (creators)", None, research.creator_queries(topic)
         return topic, None, research.default_keywords(topic)
 
-    def plan(self, topic: str, brand_raw=None) -> dict:
-        topic, brand, kws = self.resolve(topic, brand_raw)
+    def plan(self, topic: str, brand_raw=None, creators: bool = False) -> dict:
+        topic, brand, kws = self.resolve(topic, brand_raw, creators)
         with self.vault() as v:
             spent = v.month_spend(self.now)
         if self.sample:
@@ -96,6 +99,11 @@ class App:
                     "message": "Sample mode: synthetic data, nothing is spent."}
         blocked = self.live_ready()
         cached = self.cached(topic)
+        if creators and not brand:
+            p = research.plan_creators(topic[:-len(" (creators)")], spent, self.apify_cfg().get("price_per_1000_results_usd"), self.max_run_usd).to_dict()
+            if blocked:
+                p.update(ok=False, message=blocked)
+            return {**p, "sample": False, "topic": topic, "cached": cached, "creators": True}
         p = research.plan_run(kws, spent, self.apify_cfg().get("price_per_1000_results_usd"), self.max_run_usd,
                               len(([brand["own"]] if brand and brand["own"] else []) + (brand["competitors"] if brand else []))).to_dict()
         if blocked:
@@ -128,8 +136,9 @@ class App:
             return v.get_meta("research:" + slug(topic))
 
     # -- jobs
-    def start(self, topic: str, days: int, confirm: bool, brand_raw=None, reuse: bool = False) -> str:
-        topic, brand, _ = self.resolve(topic, brand_raw)
+    def start(self, topic: str, days: int, confirm: bool, brand_raw=None, reuse: bool = False, creators: bool = False) -> str:
+        topic, brand, _ = self.resolve(topic, brand_raw, creators)
+        creators = creators and not brand
         if days not in (7, 14, 30):
             raise ValueError("Pick 7, 14 or 30 days.")
         if reuse and not self.sample and not self.cached(topic):
@@ -144,10 +153,10 @@ class App:
         job = {"id": job_id, "status": "running", "messages": [], "result": None, "error": ""}
         self.jobs[job_id] = job
         self.running = job_id
-        threading.Thread(target=self._run, args=(job, topic, days, brand, reuse), daemon=True).start()
+        threading.Thread(target=self._run, args=(job, topic, days, brand, reuse, creators), daemon=True).start()
         return job_id
 
-    def _run(self, job: dict, topic: str, days: int, brand: dict | None = None, reuse: bool = False) -> None:
+    def _run(self, job: dict, topic: str, days: int, brand: dict | None = None, reuse: bool = False, creators: bool = False) -> None:
         say = lambda m: job["messages"].append(m)
         try:
             now = self.now or utcnow()
@@ -170,6 +179,17 @@ class App:
                     frames, transcriber, warn = research.live_media() if self.harvester is None else (None, None, "")
                     if warn:
                         say(warn)
+                elif creators:
+                    plan = research.plan_creators(topic[:-len(" (creators)")], v.month_spend(now), self.apify_cfg().get("price_per_1000_results_usd"), self.max_run_usd)
+                    discoverer = self.discoverer
+                    if discoverer is None:
+                        from scouts.instagram_harvest import harvest_creators as discoverer
+                    res = research.discover_creators(v, topic, plan, self.apify_cfg(), os.environ.get("APIFY_TOKEN", ""), discoverer, say, now)
+                    v.set_meta("harvested:" + slug(topic), now.isoformat())
+                    say(f"Found {res['creators']} creators with {res['reels']} recent Reels. Cost about ${res['cost']:.2f}.")
+                    frames, transcriber, warn = research.live_media() if self.discoverer is None else (None, None, "")
+                    if warn:
+                        say(warn)
                 else:
                     keywords = research.brand_keywords(brand["brand"], brand["category"]) if brand else research.expand_keywords(topic, self.get_llm("analysis"))
                     plan = research.plan_run(keywords, v.month_spend(now), self.apify_cfg().get("price_per_1000_results_usd"), self.max_run_usd,
@@ -186,7 +206,7 @@ class App:
                         say(warn)
                 say("Finding outliers and decoding the top 10…")
                 out = research.decode_top(v, topic, self.get_llm("analysis"), vocab, days=days, frames=frames, transcriber=transcriber,
-                                          now=now, settings=self.settings["agent"], brand=brand)
+                                          now=now, settings=self.settings["agent"], brand=brand, creators=creators)
                 out["sample"] = self.sample
                 out["warning"] = warn
                 v.set_meta("research:" + slug(topic), out)
@@ -280,9 +300,9 @@ def make_handler(app: App, port: int):
                     raise ValueError("send a JSON object")
                 path = urlparse(self.path).path
                 if path == "/api/plan":
-                    return self._json(200, app.plan(str(body.get("topic", "")), body.get("brand")))
+                    return self._json(200, app.plan(str(body.get("topic", "")), body.get("brand"), body.get("creators") is True))
                 if path == "/api/research":
-                    jid = app.start(str(body.get("topic", "")), int(body.get("days", 7)), body.get("confirm") is True, body.get("brand"), body.get("reuse") is True)
+                    jid = app.start(str(body.get("topic", "")), int(body.get("days", 7)), body.get("confirm") is True, body.get("brand"), body.get("reuse") is True, body.get("creators") is True)
                     return self._json(202, {"job": jid})
                 if path == "/api/script":
                     return self._json(200, app.script(str(body.get("topic", "")), str(body.get("reel_id", "")), str(body.get("my_topic", ""))))

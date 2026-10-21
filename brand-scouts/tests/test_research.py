@@ -210,6 +210,53 @@ class Web(unittest.TestCase):
         self.addCleanup(app.lock.release)
         self.assertEqual(self.call("/api/research", {"topic": "x", "days": 7})[0], 409)
 
+    def profiles(self):
+        def post(i, user, plays, pinned=False, kind="Video"):
+            return {"id": f"{user}{i}", "url": f"https://www.instagram.com/reel/{user}{i}/", "ownerUsername": user, "type": kind,
+                    "videoPlayCount": plays, "timestamp": (NOW - timedelta(days=i)).isoformat(), "isPinned": pinned}
+        def prof(user, followers, plays):
+            posts = [post(i, user, p) for i, p in enumerate(plays)] + [post(90, user, 9_999_999, pinned=True), post(91, user, 5, kind="Image"),
+                                                                       post(92, "someoneelse", 500)]
+            return {"username": user, "followersCount": followers, "latestPosts": posts}
+        return [prof("tiny", 800, [2000, 2100, 1900, 2200, 2000, 50000]), prof("mid", 40_000, [9000] * 6), prof("giant", 2_000_000, [400_000] * 6),
+                prof("sparse", 5000, [100, 100])]
+
+    def test_creators_mode_finds_creators_and_outliers(self):
+        profiles = self.profiles()
+        seen = {}
+
+        def discover(queries, cfg, token, per_query, run_cap_usd=None):
+            seen["queries"], seen["per_query"] = queries, per_query
+            return profiles, {"items": len(profiles), "usage_usd": 0.01}
+        app = self.live_app(None)
+        app.discoverer = discover
+        self.serve(app)
+        code, plan = self.call("/api/plan", {"topic": "ghostwriting", "creators": True})
+        self.assertTrue(plan["ok"] and plan["creators"])
+        self.assertEqual(plan["topic"], "ghostwriting (creators)")
+        self.assertLess(plan["est_cost"], 0.2)
+        self.assertEqual(self.call("/api/research", {"topic": "ghostwriting", "days": 30, "creators": True})[0], 400)    # no confirm
+        done = self.wait(self.call("/api/research", {"topic": "ghostwriting", "days": 30, "confirm": True, "creators": True})[1]["job"])
+        self.assertEqual((done["status"], done["error"]), ("done", ""))
+        board = done["result"]["creator_board"]
+        names = [c["username"] for c in board["creators"]]
+        self.assertEqual(set(names), {"tiny", "mid", "giant"})                    # 'sparse' has too few Reels to say anything
+        self.assertEqual({c["username"]: c["tier"] for c in board["creators"]}, {"tiny": "micro", "mid": "small", "giant": "big"})
+        self.assertEqual(names[0], "giant")
+        cards = done["result"]["cards"]
+        self.assertEqual(cards[0]["creator"], "tiny")                             # the 50,000-play Reel vs its usual 2,000
+        self.assertTrue(cards[0]["strong"])
+        self.assertEqual(cards[0]["tier"], "micro")
+        with Vault(self.dir / "v.db") as v:
+            self.assertAlmostEqual(v.month_spend(NOW), 0.01)
+            ids = {r.id for r in v.reels("ghostwriting (creators)")}
+        self.assertNotIn("tiny90", ids)                                           # pinned post dropped
+        self.assertNotIn("tiny91", ids)                                           # photo dropped
+        self.assertNotIn("tiny92", ids)                                           # someone else's post dropped
+
+    def test_tier_cutoffs(self):
+        self.assertEqual([research.tier(f) for f in (None, 9_999, 10_000, 99_999, 100_000)], ["micro", "micro", "small", "small", "big"])
+
     def live_app(self, fake):
         class Live(web.App):
             def apify_cfg(self):

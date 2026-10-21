@@ -221,3 +221,17 @@ In the web app choose **Brand**: enter the brand, its category (so "Minimalist" 
 
 ### Free AI option: Gemini
 Set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY=...` in `.env` (key from Google AI Studio), run `pip install google-genai`, and the whole app uses Gemini instead of Claude. Set `LLM_PROVIDER=anthropic` to switch back. `GEMINI_MODEL` picks the model; names change, so use one your AI Studio account lists. The free tier is rate limited, so calls are spaced about 4 seconds apart and retried when Google says "too many requests". Not tested against the real service. Compare quality on your own Reels with `agent.py compare-models --a gemini:<model> --b claude-sonnet-5-5`.
+
+## Creators mode (recommended)
+
+Instead of sampling a hashtag, Creators mode searches Instagram for **creators** on a topic (Apify user search), reads each
+creator's latest Reels from the same result (one charge per creator, about $0.11 for a topic), and then:
+
+- **Top creators table**: up to 10, ranked by *median* plays of their recent Reels, with quotas per size so micro-creators
+  (<10k followers) sit next to small (<100k) and big names. Creators with fewer than 3 recent Reels are left out.
+- **Top outlier Reels**: the usual outlier logic against each creator's own median (pinned posts, photos and other
+  accounts' posts are dropped), decoded as before, each tagged with its creator size.
+- Results are stored under the topic name plus " (creators)", separate from hashtag runs.
+
+Limits: one user search returns the profile's latest posts only (about a dozen), so "usual" is based on those. The
+winning-format roll-up per topic and tier is not in the web app yet.

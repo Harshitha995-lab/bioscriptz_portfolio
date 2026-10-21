@@ -41,6 +41,101 @@ def default_keywords(topic: str) -> list[str]:
     return kws
 
 
+def creator_queries(topic: str) -> list[str]:
+    t = topic.lower().strip()
+    return list(dict.fromkeys([t, f"{t} coach", f"{t} tips", f"{t} creator"]))
+
+
+TIERS = (("micro", 10_000), ("small", 100_000), ("big", None))
+TIER_QUOTA = {"big": 4, "small": 3, "micro": 3}      # of the top 10 creators; leftovers fill from whoever is next
+CREATOR_PER_QUERY = 10
+
+
+def tier(followers: int | None) -> str:
+    """micro under 10,000 followers, small up to 100,000, big above. Unknown follower count counts as micro."""
+    f = followers or 0
+    for name, cap in TIERS:
+        if cap is None or f < cap:
+            return name
+    return "big"
+
+
+def profile_to_reels(profile: dict, topic: str) -> list[Reel]:
+    """Video posts from a profile item's latestPosts. Pinned posts are dropped (they are old on purpose and skew a creator's 'usual'),
+    as are posts by other accounts (collabs/tags)."""
+    from .instagram_harvest import item_to_reel, to_int
+    name = str(profile.get("username") or "").lower()
+    followers = to_int(profile.get("followersCount")) or None
+    out = []
+    for post in profile.get("latestPosts") or []:
+        if not isinstance(post, dict) or post.get("isPinned"):
+            continue
+        if str(post.get("ownerUsername") or name).lower() != name:
+            continue
+        is_video = post.get("type") == "Video" or post.get("productType") == "clips" or (
+            post.get("type") not in ("Image", "Sidecar") and (post.get("videoUrl") or post.get("videoPlayCount")))
+        if not is_video:
+            continue
+        r = item_to_reel(post, source="creator")
+        if r is None:
+            continue
+        r.account, r.followers, r.niche = name, followers, topic
+        out.append(r)
+    return out
+
+
+def plan_creators(topic: str, month_spent: float, price: float | None, max_run_usd: float) -> RunPlan:
+    p = budget.ASSUMED_PRICE_PER_1000 if price is None else float(price)
+    qs = creator_queries(topic)
+    est = round(len(qs) * CREATOR_PER_QUERY / 1000 * p, 4)
+    remaining = max(budget.FREE_CREDIT_USD - month_spent, 0.0)
+    ok = est <= max(remaining - budget.RESERVE_USD, 0.0) + 1e-9 and est <= max_run_usd
+    msg = "" if ok else f"This needs about ${est:.2f} but only ${max(remaining - budget.RESERVE_USD, 0.0):.2f} is available this month."
+    return RunPlan(qs, CREATOR_PER_QUERY, 0, 0, p, price is None, est, ok, month_spent, msg)
+
+
+def discover_creators(vault, topic: str, plan: RunPlan, apify_cfg: dict, token: str, discoverer, progress=lambda m: None, now=None) -> dict:
+    """Find creators for a topic by user search, save their recent Reels (niche = topic) and the spend."""
+    now = now or utcnow()
+    if not plan.ok:
+        raise RuntimeError(plan.message)
+    remaining = max(budget.FREE_CREDIT_USD - vault.month_spend(now), 0.0)
+    cap = budget.per_run_cap(min(remaining, plan.est_cost + budget.RESERVE_USD), len(plan.keywords))
+    progress(f"Searching Instagram for creators ({len(plan.keywords)} searches)…")
+    profiles, info = discoverer(plan.keywords, apify_cfg, token, per_query=plan.per_keyword, run_cap_usd=cap)
+    reels = [r for p in profiles for r in profile_to_reels(p, topic)]
+    vault.upsert_reels(reels, now)
+    cost = info.get("usage_usd") if info.get("usage_usd") is not None else info.get("items", len(profiles)) / 1000 * plan.price
+    vault.record_run("topic-creators", cost, info.get("items", len(profiles)),
+                     f"{topic}; " + ("reported by Apify" if info.get("usage_usd") is not None else "ESTIMATED"), now)
+    return {"creators": len(profiles), "reels": len(reels), "cost": round(cost, 4)}
+
+
+def creator_board(vault, topic: str, top: int = 10) -> dict:
+    """The topic's strongest creators from the saved Reels. Ranked by median plays within each size tier, so micro-creators
+    are shown next to the big names instead of being buried by them."""
+    by: dict[str, list[Reel]] = {}
+    for r in vault.reels(topic):
+        by.setdefault(r.account, []).append(r)
+    rows = []
+    for name, rs in by.items():
+        plays = sorted(r.plays for r in rs)
+        best = max(rs, key=lambda r: r.plays)
+        f = next((r.followers for r in rs if r.followers), None)
+        med = plays[len(plays) // 2]
+        rows.append({"username": name, "followers": f, "tier": tier(f), "reels": len(rs), "median_plays": med, "best_plays": best.plays,
+                     "best_link": best.url, "reach": round(med / f, 2) if f else None})
+    rows = [r for r in rows if r["reels"] >= 3]          # fewer Reels than that say nothing about what is normal
+    rows.sort(key=lambda r: -r["median_plays"])
+    chosen = []
+    for t, q in TIER_QUOTA.items():
+        chosen += [r for r in rows if r["tier"] == t][:q]
+    chosen += [r for r in rows if r not in chosen][:max(top - len(chosen), 0)]
+    chosen = sorted(chosen, key=lambda r: -r["median_plays"])[:top]
+    return {"creators": chosen, "found": len(rows), "tiers": {t: sum(1 for r in rows if r["tier"] == t) for t, _ in TIERS},
+            "note": "Ranked by median plays of their recent Reels (the usual, not one lucky post). Followers come from Instagram at fetch time."}
+
+
 def brand_keywords(brand: str, category: str) -> list[str]:
     """Searches aimed at one brand. The category separates a brand from the ordinary word (Minimalist the skincare brand vs minimalism)."""
     b, c = brand.lower().strip(), category.lower().strip()
@@ -197,7 +292,7 @@ def contrarian_take(bd: ViralBreakdown) -> dict:
 def decode(outlier: Outlier, bd: ViralBreakdown) -> dict:
     r = outlier.reel
     base = {"reel_id": r.id, "creator": r.account, "followers": r.followers, "link": r.url, "plays": r.plays, "likes": r.likes,
-            "comments": r.comments, "ratio": round(outlier.ratio, 1), "strong": outlier.strong,
+            "comments": r.comments, "tier": tier(r.followers) if r.followers else None, "ratio": round(outlier.ratio, 1), "strong": outlier.strong,
             "basis": f"{outlier.ratio:.0f}× this creator's usual {outlier.usual:,.0f} plays" if outlier.strong
             else (f"{outlier.ratio:.0f}× their follower count (no creator baseline yet; treat as a lead)" if outlier.basis == "followers"
                   else f"{outlier.ratio:.0f}× the typical Reel in this search (no creator baseline or follower count; treat as a lead)"),
@@ -235,7 +330,7 @@ def summarise(cards: list[dict]) -> dict:
 
 # ---------------------------------------------------------------------------- the run
 def decode_top(vault, topic: str, llm: LLM, vocab: dict, *, days: int = 7, top: int = 10, frames=None, transcriber=None,
-               min_plays: int = 1000, now=None, settings: dict | None = None, brand: dict | None = None) -> dict:
+               min_plays: int = 1000, now=None, settings: dict | None = None, brand: dict | None = None, creators: bool = False) -> dict:
     from .transcribe import ensure_transcripts
     t = (settings or {}).get("outliers", {})
     reels = vault.reels()
@@ -257,7 +352,8 @@ def decode_top(vault, topic: str, llm: LLM, vocab: dict, *, days: int = 7, top: 
     if brand is not None:
         ignore = {w for w in re.split(r"\W+", (brand["brand"] + " " + brand["category"]).lower()) if w} | {re.sub(r"[^a-z0-9]", "", brand["brand"].lower())}
         audience = audience_section(vault, topic, llm, ignore | {brand["own"], *brand["competitors"]} - {""})
-    return {"brand": brand, "audience": audience, "topic": topic, "days": days, "generated_at": (now or utcnow()).isoformat(), "stats": stats, "cards": cards,
+    board = creator_board(vault, topic) if creators else None
+    return {"brand": brand, "audience": audience, "creator_board": board, "topic": topic, "days": days, "generated_at": (now or utcnow()).isoformat(), "stats": stats, "cards": cards,
             "summary": summarise(cards), "transcripts": tstats,
             "frames": any("frames" in b.evidence for b in bds.values() if not b.error),
             "undated": sum(1 for o in chosen if o.reel.posted_at is None)}
