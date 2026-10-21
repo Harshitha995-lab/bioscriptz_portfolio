@@ -164,8 +164,8 @@ function render(res, topic) {
 
 function creatorBoard(b) {
   const box = el("div", { class: "box" }, el("h2", { text: "Top creators" }));
-  if (!b.creators.length) return el("div", { class: "box" }, el("h2", { text: "Top creators" }), el("p", { class: "small", text: "No creator had 3 or more recent Reels." }));
-  box.append(el("p", { class: "small", text: `${b.found} creators had enough Reels (micro ${b.tiers.micro}, small ${b.tiers.small}, big ${b.tiers.big}). Micro under 10k followers, small under 100k, big above.` }));
+  if (!b.creators.length) return el("div", { class: "box" }, el("h2", { text: "Top creators" }), el("p", { class: "small", text: "No creator passed the floor (1,000+ followers, 3+ recent Reels, usual of 1,000+ plays). Try a broader topic." }));
+  box.append(el("p", { class: "small", text: `${b.searched} creators found; ${b.found} passed the floor (1,000+ followers, 3+ Reels, usual 1,000+ plays): (micro ${b.tiers.micro}, small ${b.tiers.small}, big ${b.tiers.big}). Micro under 10k followers, small under 100k, big above.` }));
   const tbl = el("table", {}, el("tr", {}, ...["Creator", "Size", "Followers", "Usual plays", "Best Reel", "Plays per follower"].map((h) => el("th", { text: h }))));
   for (const c of b.creators) {
     tbl.append(el("tr", {}, el("td", { text: "@" + c.username }), el("td", { text: c.tier }), el("td", { text: c.followers ? fmt(c.followers) : "?" }),

@@ -43,12 +43,14 @@ def default_keywords(topic: str) -> list[str]:
 
 def creator_queries(topic: str) -> list[str]:
     t = topic.lower().strip()
-    return list(dict.fromkeys([t, f"{t} coach", f"{t} tips", f"{t} creator"]))
+    return list(dict.fromkeys([t, f"{t} coach", f"{t} tips", f"{t} creator", f"{t} expert", f"{t} strategy"]))
 
 
 TIERS = (("micro", 10_000), ("small", 100_000), ("big", None))
 TIER_QUOTA = {"big": 4, "small": 3, "micro": 3}      # of the top 10 creators; leftovers fill from whoever is next
-CREATOR_PER_QUERY = 10
+CREATOR_PER_QUERY = 25
+MIN_FOLLOWERS = 1000          # name search also returns hobby and empty accounts; below these floors a creator says nothing about what works
+MIN_MEDIAN_PLAYS = 1000
 
 
 def tier(followers: int | None) -> str:
@@ -125,14 +127,15 @@ def creator_board(vault, topic: str, top: int = 10) -> dict:
         med = plays[len(plays) // 2]
         rows.append({"username": name, "followers": f, "tier": tier(f), "reels": len(rs), "median_plays": med, "best_plays": best.plays,
                      "best_link": best.url, "reach": round(med / f, 2) if f else None})
-    rows = [r for r in rows if r["reels"] >= 3]          # fewer Reels than that say nothing about what is normal
+    found_all = len(rows)
+    rows = [r for r in rows if r["reels"] >= 3 and (r["followers"] or 0) >= MIN_FOLLOWERS and r["median_plays"] >= MIN_MEDIAN_PLAYS]
     rows.sort(key=lambda r: -r["median_plays"])
     chosen = []
     for t, q in TIER_QUOTA.items():
         chosen += [r for r in rows if r["tier"] == t][:q]
     chosen += [r for r in rows if r not in chosen][:max(top - len(chosen), 0)]
     chosen = sorted(chosen, key=lambda r: -r["median_plays"])[:top]
-    return {"creators": chosen, "found": len(rows), "tiers": {t: sum(1 for r in rows if r["tier"] == t) for t, _ in TIERS},
+    return {"creators": chosen, "found": len(rows), "searched": found_all, "tiers": {t: sum(1 for r in rows if r["tier"] == t) for t, _ in TIERS},
             "note": "Ranked by median plays of their recent Reels (the usual, not one lucky post). Followers come from Instagram at fetch time."}
 
 
