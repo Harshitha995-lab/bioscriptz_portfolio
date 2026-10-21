@@ -311,6 +311,41 @@ def decode(outlier: Outlier, bd: ViralBreakdown) -> dict:
             "spice": bd.spice, "evidence": bd.evidence}
 
 
+MIN_PATTERN = 3        # fewer Reels than this in a group is not a pattern
+
+
+def winning_formats(cards: list[dict]) -> dict:
+    """What the decoded top Reels do, grouped by creator size. A format = content angle + the kind of spoken hook.
+    Descriptive only: it lists what winners share; it does not prove those choices caused the views (that needs ordinary
+    Reels from the same creators for comparison: `agent.py analyse`)."""
+    groups: dict[str, list[dict]] = {}
+    for c in cards:
+        if c.get("error"):
+            continue
+        for key in ("all", c.get("tier") or "unknown size"):
+            groups.setdefault(key, []).append(c)
+    out = []
+    for name in ("all", "micro", "small", "big", "unknown size"):
+        cs = groups.get(name)
+        if not cs:
+            continue
+        formats: dict[tuple, list[dict]] = {}
+        for c in cs:
+            ht = c["hook"]["audio"]["type"] if c["hook"]["audio"]["analysed"] else "no transcript"
+            formats.setdefault((c["content_angle"], ht), []).append(c)
+        rows = []
+        for (angle, ht), members in sorted(formats.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            best = max(members, key=lambda c: c["ratio"])
+            rows.append({"angle": angle, "spoken_hook": ht, "count": len(members), "example_creator": best["creator"], "example_link": best["link"],
+                         "example_structure": best["structure"]})
+        rates = sorted(c["rate_of_revelation"]["per_10s"] for c in cs if c["rate_of_revelation"]["per_10s"] is not None)
+        out.append({"group": name, "n": len(cs), "enough": len(cs) >= MIN_PATTERN, "formats": rows[:5],
+                    "with_cta": sum(c["cta"]["type"] != "none" for c in cs), "contrarian": sum(c["contrarian"]["value"] for c in cs),
+                    "median_rate": rates[len(rates) // 2] if rates else None})
+    return {"groups": out, "min_pattern": MIN_PATTERN,
+            "note": "Descriptive: what these winning Reels have in common. Groups under 3 Reels are shown but are not patterns."}
+
+
 def summarise(cards: list[dict]) -> dict:
     ok = [c for c in cards if not c.get("error")]
     n = len(ok)
@@ -353,7 +388,7 @@ def decode_top(vault, topic: str, llm: LLM, vocab: dict, *, days: int = 7, top: 
         ignore = {w for w in re.split(r"\W+", (brand["brand"] + " " + brand["category"]).lower()) if w} | {re.sub(r"[^a-z0-9]", "", brand["brand"].lower())}
         audience = audience_section(vault, topic, llm, ignore | {brand["own"], *brand["competitors"]} - {""})
     board = creator_board(vault, topic) if creators else None
-    return {"brand": brand, "audience": audience, "creator_board": board, "topic": topic, "days": days, "generated_at": (now or utcnow()).isoformat(), "stats": stats, "cards": cards,
+    return {"brand": brand, "audience": audience, "creator_board": board, "formats": winning_formats(cards) if creators else None, "topic": topic, "days": days, "generated_at": (now or utcnow()).isoformat(), "stats": stats, "cards": cards,
             "summary": summarise(cards), "transcripts": tstats,
             "frames": any("frames" in b.evidence for b in bds.values() if not b.error),
             "undated": sum(1 for o in chosen if o.reel.posted_at is None)}

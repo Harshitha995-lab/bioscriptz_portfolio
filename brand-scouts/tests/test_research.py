@@ -243,6 +243,7 @@ class Web(unittest.TestCase):
         self.assertEqual(set(names), {"tiny", "mid", "giant"})                    # 'sparse' has too few Reels to say anything
         self.assertEqual({c["username"]: c["tier"] for c in board["creators"]}, {"tiny": "micro", "mid": "small", "giant": "big"})
         self.assertEqual(names[0], "giant")
+        self.assertTrue(done["result"]["formats"]["groups"])
         cards = done["result"]["cards"]
         self.assertEqual(cards[0]["creator"], "tiny")                             # the 50,000-play Reel vs its usual 2,000
         self.assertTrue(cards[0]["strong"])
@@ -253,6 +254,20 @@ class Web(unittest.TestCase):
         self.assertNotIn("tiny90", ids)                                           # pinned post dropped
         self.assertNotIn("tiny91", ids)                                           # photo dropped
         self.assertNotIn("tiny92", ids)                                           # someone else's post dropped
+
+    def test_winning_formats_groups_by_tier(self):
+        def card(creator, tier, angle, ratio, ht="bold-claim"):
+            return {"creator": creator, "tier": tier, "content_angle": angle, "ratio": ratio, "link": "https://www.instagram.com/reel/x/", "structure": ["hook", "point"],
+                    "hook": {"audio": {"analysed": True, "type": ht}}, "rate_of_revelation": {"per_10s": 2.0}, "cta": {"type": "none"}, "contrarian": {"value": False}}
+        cards = [card("a", "micro", "List / how-to", 9), card("b", "micro", "List / how-to", 20), card("c", "micro", "List / how-to", 5),
+                 card("d", "big", "Story / confession", 4), {"error": "x", "tier": "big"}]
+        f = research.winning_formats(cards)
+        g = {x["group"]: x for x in f["groups"]}
+        self.assertEqual(g["all"]["n"], 4)
+        self.assertTrue(g["micro"]["enough"])
+        self.assertFalse(g["big"]["enough"])                       # one Reel is not a pattern
+        self.assertEqual(g["micro"]["formats"][0]["count"], 3)
+        self.assertEqual(g["micro"]["formats"][0]["example_creator"], "b")      # strongest Reel of the format
 
     def test_tier_cutoffs(self):
         self.assertEqual([research.tier(f) for f in (None, 9_999, 10_000, 99_999, 100_000)], ["micro", "micro", "small", "small", "big"])

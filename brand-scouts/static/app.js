@@ -140,6 +140,7 @@ function render(res, topic) {
   const r = $("results"); r.replaceChildren();
   const s = res.summary;
   if (res.creator_board) r.append(creatorBoard(res.creator_board));
+  if (res.formats) r.append(formatsBox(res.formats));
   r.append(el("h2", { text: `Top outliers for “${res.topic}” — last ${res.days} days` }));
   if (res.sample) r.append(el("div", { class: "note", text: "SAMPLE: synthetic data and a rule-based stand-in analyst. This shows the layout, not real findings." }));
   if (res.warning) r.append(el("div", { class: "note", text: res.warning }));
@@ -172,6 +173,22 @@ function creatorBoard(b) {
       el("td", { text: c.reach == null ? "?" : c.reach + "×" })));
   }
   box.append(tbl, el("p", { class: "small", text: b.note }));
+  return box;
+}
+
+function formatsBox(f) {
+  const box = el("div", { class: "box" }, el("h2", { text: "Winning formats" }));
+  for (const g of f.groups) {
+    box.append(el("h3", { text: `${g.group === "all" ? "All sizes" : g.group + " creators"} — ${g.n} Reels${g.enough ? "" : " (too few to call a pattern)"}` }));
+    const tbl = el("table", {}, el("tr", {}, ...["Format (angle + spoken hook)", "Reels", "Example", "Structure"].map((h) => el("th", { text: h }))));
+    for (const x of g.formats) {
+      tbl.append(el("tr", {}, el("td", { text: `${x.angle} + ${x.spoken_hook}` }), el("td", { text: String(x.count) }),
+        el("td", {}, LINK_OK.test(x.example_link) ? el("a", { href: x.example_link, target: "_blank", rel: "noopener noreferrer", text: "@" + x.example_creator }) : "@" + x.example_creator),
+        el("td", { text: x.example_structure.join(" → ") })));
+    }
+    box.append(tbl, el("p", { class: "small", text: `${g.contrarian} contrarian · ${g.with_cta} with a CTA · median ${g.median_rate == null ? "?" : g.median_rate} reveals/10s` }));
+  }
+  box.append(el("p", { class: "small", text: f.note }));
   return box;
 }
 

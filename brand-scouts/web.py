@@ -206,7 +206,7 @@ class App:
                         say(warn)
                 say("Finding outliers and decoding the top 10…")
                 out = research.decode_top(v, topic, self.get_llm("analysis"), vocab, days=days, frames=frames, transcriber=transcriber,
-                                          now=now, settings=self.settings["agent"], brand=brand, creators=creators)
+                                          now=now, settings=self.settings["agent"], brand=brand, creators=creators, top=12 if creators else 10)
                 out["sample"] = self.sample
                 out["warning"] = warn
                 v.set_meta("research:" + slug(topic), out)

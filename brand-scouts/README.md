@@ -234,4 +234,4 @@ creator's latest Reels from the same result (one charge per creator, about $0.11
 - Results are stored under the topic name plus " (creators)", separate from hashtag runs.
 
 Limits: one user search returns the profile's latest posts only (about a dozen), so "usual" is based on those. The
-winning-format roll-up per topic and tier is not in the web app yet.
+winning-format roll-up (by creator size) is descriptive, built from the decoded top 12 Reels; the stronger comparison against ordinary Reels is still `agent.py analyse`.
