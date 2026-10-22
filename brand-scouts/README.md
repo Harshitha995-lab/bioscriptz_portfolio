@@ -224,8 +224,14 @@ Set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY=...` in `.env` (key from Google AI
 
 ## Creators mode (recommended)
 
-Instead of sampling a hashtag, Creators mode searches Instagram for **creators** on a topic (Apify user search), reads each
-creator's latest Reels from the same result (one charge per creator, about $0.40 for a topic), and then:
+Instead of sampling a hashtag, Creators mode collects **creators** three ways and reads each one's latest Reels (one charge per
+creator, about $0.35 for a topic):
+
+1. **Handles you give** (optional box, up to 30): always included, even under the size and plays floors.
+2. **Creators behind the most-played Reels** on the topic's hashtags (this is what finds the real winners, big and small).
+3. **Name search**: weakest (it matches names, so it mostly finds small accounts).
+
+Then:
 
 - **Top creators table**: up to 10, ranked by *median* plays of their recent Reels, with quotas per size so micro-creators
   (<10k followers) sit next to small (<100k) and big names. Creators with fewer than 3 recent Reels are left out.

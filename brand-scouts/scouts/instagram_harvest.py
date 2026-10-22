@@ -340,3 +340,31 @@ def harvest_creators(queries: list[str], cfg: dict, token: str, per_query: int =
             if name and name not in seen:
                 seen[name] = p
     return list(seen.values()), {"items": items, "runs": len(queries), "usage_usd": usage}
+
+
+def harvest_profile_details(handles: list[str], cfg: dict, token: str, run_cap_usd: float | None = None) -> tuple[list[dict], dict]:
+    """Profile details (followers, latest posts) for known handles: the creators behind winning hashtag Reels, and the ones the user names.
+    One run, one charge per profile."""
+    handles = clean_handles(handles)
+    if not handles:
+        return [], {"items": 0, "usage_usd": None}
+    actor = cfg.get("profile_actor_id") or cfg.get("actor_id", "REPLACE_ME")
+    if actor == "REPLACE_ME":
+        raise RuntimeError("Set actor_id in config/apify.json before a live run.")
+    from apify_client import ApifyClient
+
+    client = ApifyClient(token)
+    run = _call(client.actor(actor), {"directUrls": [profile_url(h) for h in handles], "resultsType": "details", "resultsLimit": 1,
+                                      "addParentData": False}, run_cap_usd)
+    if not run:
+        raise RuntimeError(f"Apify run for {actor} returned nothing; check the run in the Apify console.")
+    dataset_id = run_field(run, "defaultDatasetId", "default_dataset_id")
+    if not dataset_id:
+        raise RuntimeError(f"Apify run for {actor} gave no dataset id; check the run in the Apify console.")
+    usage = run_field(run, "usageTotalUsd", "usage_total_usd")
+    try:
+        usage = float(usage) if usage is not None else None
+    except (TypeError, ValueError):
+        usage = None
+    profiles = [dict(i) for i in client.dataset(dataset_id).iterate_items() if isinstance(i, dict) and i.get("username")]
+    return profiles, {"items": len(profiles), "usage_usd": usage}

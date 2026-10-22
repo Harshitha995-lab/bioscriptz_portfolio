@@ -278,6 +278,45 @@ class Web(unittest.TestCase):
              "rate_of_revelation": {"per_10s": None}, "cta": {"type": "none"}, "contrarian": {"value": False}}
         self.assertEqual(research.winning_formats([c])["groups"][0]["formats"][0]["spoken_hook"], "on-screen number-list")
 
+    def test_creators_from_seeds_and_hashtag_winners(self):
+        def post(i, user, plays):
+            return {"id": f"{user}{i}", "url": f"https://www.instagram.com/reel/{user}{i}/", "ownerUsername": user, "type": "Video", "videoPlayCount": plays,
+                    "timestamp": (NOW - timedelta(days=i)).isoformat()}
+        def prof(user, followers, plays):
+            return {"username": user, "followersCount": followers, "latestPosts": [post(i, user, p) for i, p in enumerate(plays)]}
+        asked = {}
+
+        def hashtags(keywords, cfg, token, max_reels, creators, **kw):
+            asked["kw"] = keywords
+            return [Reel(id="h1", url="https://www.instagram.com/reel/h1/", account="Star", plays=900_000, posted_at=NOW),
+                    Reel(id="h2", url="https://www.instagram.com/reel/h2/", account="minor", plays=5000, posted_at=NOW),
+                    Reel(id="h3", url="https://www.instagram.com/reel/h3/", account="mine", plays=100, posted_at=NOW)], {"usage_usd": 0.05}
+
+        def detailer(handles, cfg, token, run_cap_usd=None):
+            asked["handles"] = handles
+            return [prof("mine", 200, [80] * 5), prof("star", 3_000_000, [500_000] * 5), prof("minor", 20_000, [4000] * 5)], {"usage_usd": 0.02}
+
+        def discoverer(queries, cfg, token, per_query, run_cap_usd=None):
+            return [prof("namematch", 400, [10] * 5)], {"items": 1, "usage_usd": 0.01}
+        with Vault(self.dir / "v.db") as v:
+            plan = research.plan_creators("ai automation", 0.0, 2.7, 1.5, seeds=1)
+            res = research.discover_creators(v, "ai automation (creators)", plan, {}, "t", discoverer, now=NOW, harvester=hashtags, detailer=detailer, seeds=["mine"])
+            self.assertEqual(asked["handles"], ["mine", "star", "minor"])             # the user's handles first, then winners by their best Reel
+            self.assertEqual((res["seeds"], res["from_hashtags"], res["from_search"]), (1, 2, 1))
+            self.assertAlmostEqual(res["cost"], 0.08)
+            self.assertAlmostEqual(v.month_spend(NOW), 0.08)
+            board = research.creator_board(v, "ai automation (creators)", keep={"mine"})
+            names = {c["username"]: c["tier"] for c in board["creators"]}
+            self.assertEqual(names, {"mine": "micro", "star": "big", "minor": "small"})     # 'mine' is under both floors but was named; 'namematch' is dropped
+            self.assertNotIn("mine", {c["username"] for c in research.creator_board(v, "ai automation (creators)")["creators"]})
+
+    def test_clean_handles(self):
+        self.assertEqual(research.clean_handles("@A_b, c.d\nA_b  e"), ["a_b", "c.d", "e"])
+        with self.assertRaises(ValueError):
+            research.clean_handles("not a handle!")
+        with self.assertRaises(ValueError):
+            research.clean_handles([f"h{i}" for i in range(31)])
+
     def test_tier_cutoffs(self):
         self.assertEqual([research.tier(f) for f in (None, 9_999, 10_000, 99_999, 100_000)], ["micro", "micro", "small", "small", "big"])
 

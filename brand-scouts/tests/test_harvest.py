@@ -107,6 +107,19 @@ class LiveGlueTests(unittest.TestCase):
         self.assertEqual({k: v for k, v in self.calls["runs"][0][1].items() if k != "search"},
                          {"addParentData": False, "searchType": "user", "searchLimit": 7, "resultsType": "details"})
 
+    def test_profile_details_by_handle(self):
+        from scouts.instagram_harvest import harvest_profile_details
+        old = list(self.PROFILE_ITEMS)
+        self.addCleanup(lambda: self.PROFILE_ITEMS.__setitem__(slice(None), old))
+        self.PROFILE_ITEMS[:] = [{"username": "jo", "followersCount": 9}, {"nothing": 1}]
+        profiles, info = harvest_profile_details(["@jo", "al"], self.CFG, "TOKEN")
+        self.assertEqual([p["username"] for p in profiles], ["jo"])
+        actor, run_input = self.calls["runs"][0]
+        self.assertEqual(actor, "profile/actor")
+        self.assertEqual(run_input["directUrls"], ["https://www.instagram.com/jo/", "https://www.instagram.com/al/"])
+        self.assertEqual(run_input["resultsType"], "details")
+        self.assertEqual(harvest_profile_details([], self.CFG, "TOKEN"), ([], {"items": 0, "usage_usd": None}))
+
     def test_keywords_only(self):
         from scouts.instagram_harvest import harvest
         reels, info = harvest(["#tag", "a term"], self.CFG, "TOKEN")

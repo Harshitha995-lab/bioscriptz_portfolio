@@ -37,6 +37,7 @@ async function loadSaved(topic) {
 
 const mode = () => document.querySelector('input[name="mode"]:checked').value;
 const isCreators = () => mode() === "creators";
+const seeds = () => (isCreators() ? $("seeds").value : "");
 function brandPayload() {
   if (mode() !== "brand") return null;
   return { brand: $("brand").value.trim(), category: $("category").value.trim(), own: $("own").value.trim(),
@@ -44,6 +45,7 @@ function brandPayload() {
 }
 document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", () => {
   const b = mode() === "brand";
+  $("seedBox").hidden = !isCreators();
   $("go").textContent = isCreators() ? "Find creators" : "Find outliers";
   $("brandFields").hidden = !b; $("topic").hidden = b; $("topicLabel").hidden = b; $("topic").required = !b;
   $("topic").closest(".row").hidden = b;
@@ -55,13 +57,13 @@ $("form").addEventListener("submit", async (e) => {
   const topic = brand ? `${brand.brand} ${brand.category}` : $("topic").value.trim(), days = Number($("days").value);
   $("results").replaceChildren(); $("progress").hidden = true;
   try {
-    const plan = await api("/api/plan", { topic, brand, creators: isCreators() });
+    const plan = await api("/api/plan", { topic, brand, creators: isCreators(), seeds: seeds() });
     if (plan.sample) return run(topic, days, false, brand);
     const box = $("plan"); box.hidden = false; box.replaceChildren();
     const inner = el("div", { class: "box" },
       el("b", { text: `Plan for “${plan.topic}”` }),
       el("p", { text: plan.message }),
-      el("p", { class: "small", text: (plan.creators ? `${plan.keywords.length} creator searches × up to ${plan.per_keyword} creators, each with their latest Reels. ` : `${plan.keywords.length} search terms × ${plan.per_keyword} + ${plan.baseline_creators} creators × ${plan.per_creator} Reels. `) +
+      el("p", { class: "small", text: (plan.creators ? `Creators come from your handles, the most-played Reels on the topic's hashtags, and ${plan.keywords.length} name searches; each comes with their latest Reels. ` : `${plan.keywords.length} search terms × ${plan.per_keyword} + ${plan.baseline_creators} creators × ${plan.per_creator} Reels. `) +
         `Estimated cost $${plan.est_cost.toFixed(2)} at $${plan.price.toFixed(2)} per 1,000 results${plan.price_assumed ? " (ASSUMED price)" : ""}. Month so far $${plan.month_spent.toFixed(2)} of $5.00.` }));
     const go = el("button", { type: "button", text: `Run for about $${plan.est_cost.toFixed(2)}`, onclick: () => { box.hidden = true; run(topic, days, true, brand); } });
     if (!plan.ok) go.disabled = true;
@@ -80,7 +82,7 @@ async function run(topic, days, confirm, brand, reuse) {
   $("go").disabled = true;
   const prog = $("progress"); prog.hidden = false; prog.replaceChildren(el("p", { text: "Starting…" }));
   try {
-    const { job } = await api("/api/research", { topic, days, confirm, brand, reuse: reuse === true, creators: isCreators() });
+    const { job } = await api("/api/research", { topic, days, confirm, brand, reuse: reuse === true, creators: isCreators(), seeds: seeds() });
     for (;;) {
       await new Promise((r) => setTimeout(r, 1200));
       const j = await api("/api/job/" + job);

@@ -43,12 +43,15 @@ def default_keywords(topic: str) -> list[str]:
 
 def creator_queries(topic: str) -> list[str]:
     t = topic.lower().strip()
-    return list(dict.fromkeys([t, f"{t} coach", f"{t} tips", f"{t} creator", f"{t} expert", f"{t} strategy"]))
+    return list(dict.fromkeys([t, f"{t} coach", f"{t} expert", f"{t} creator"]))
 
 
 TIERS = (("micro", 10_000), ("small", 100_000), ("big", None))
 TIER_QUOTA = {"big": 4, "small": 3, "micro": 3}      # of the top 10 creators; leftovers fill from whoever is next
-CREATOR_PER_QUERY = 25
+CREATOR_PER_QUERY = 15
+HASHTAG_SEARCHES = 3          # hashtag/term searches whose best Reels point at the creators who actually win
+HASHTAG_PER_SEARCH = 18       # what a free Apify plan returns per hashtag
+HASHTAG_CANDIDATES = 15       # creators taken from those hits, ranked by their best Reel's plays
 MIN_FOLLOWERS = 1000          # name search also returns hobby and empty accounts; below these floors a creator says nothing about what works
 MIN_MEDIAN_PLAYS = 1000
 
@@ -86,34 +89,99 @@ def profile_to_reels(profile: dict, topic: str) -> list[Reel]:
     return out
 
 
-def plan_creators(topic: str, month_spent: float, price: float | None, max_run_usd: float) -> RunPlan:
+def clean_handles(raw) -> list[str]:
+    """Handles the user typed (comma, space or newline separated, with or without @). At most 30."""
+    parts = re.split(r"[\s,;]+", raw) if isinstance(raw, str) else [str(x) for x in (raw or [])]
+    out = []
+    for h in parts:
+        h = h.strip().lstrip("@").lower()
+        if not h:
+            continue
+        if not HANDLE.match(h):
+            raise ValueError(f"'{h}' is not a valid Instagram handle.")
+        if h not in out:
+            out.append(h)
+    if len(out) > 30:
+        raise ValueError("Give at most 30 creator handles.")
+    return out
+
+
+def plan_creators(topic: str, month_spent: float, price: float | None, max_run_usd: float, seeds: int = 0) -> RunPlan:
     p = budget.ASSUMED_PRICE_PER_1000 if price is None else float(price)
     qs = creator_queries(topic)
-    est = round(len(qs) * CREATOR_PER_QUERY / 1000 * p, 4)
+    results = len(qs) * CREATOR_PER_QUERY + HASHTAG_SEARCHES * HASHTAG_PER_SEARCH + HASHTAG_CANDIDATES + seeds
+    est = round(results / 1000 * p, 4)
     remaining = max(budget.FREE_CREDIT_USD - month_spent, 0.0)
     ok = est <= max(remaining - budget.RESERVE_USD, 0.0) + 1e-9 and est <= max_run_usd
     msg = "" if ok else f"This needs about ${est:.2f} but only ${max(remaining - budget.RESERVE_USD, 0.0):.2f} is available this month."
     return RunPlan(qs, CREATOR_PER_QUERY, 0, 0, p, price is None, est, ok, month_spent, msg)
 
 
-def discover_creators(vault, topic: str, plan: RunPlan, apify_cfg: dict, token: str, discoverer, progress=lambda m: None, now=None) -> dict:
-    """Find creators for a topic by user search, save their recent Reels (niche = topic) and the spend."""
+def discover_creators(vault, topic: str, plan: RunPlan, apify_cfg: dict, token: str, discoverer, progress=lambda m: None, now=None, *,
+                      harvester=None, detailer=None, seeds: list[str] | None = None) -> dict:
+    """Find creators three ways and save their recent Reels (niche = topic) and every stage's spend:
+    1. the handles the user gave (always included), 2. creators behind the most-played Reels on the topic's hashtags,
+    3. Instagram name search (weakest: it matches names, so it mostly finds small accounts). 2 and 3 need their callables."""
     now = now or utcnow()
     if not plan.ok:
         raise RuntimeError(plan.message)
-    remaining = max(budget.FREE_CREDIT_USD - vault.month_spend(now), 0.0)
-    cap = budget.per_run_cap(min(remaining, plan.est_cost + budget.RESERVE_USD), len(plan.keywords))
-    progress(f"Searching Instagram for creators ({len(plan.keywords)} searches)…")
-    profiles, info = discoverer(plan.keywords, apify_cfg, token, per_query=plan.per_keyword, run_cap_usd=cap)
-    reels = [r for p in profiles for r in profile_to_reels(p, topic)]
+    seeds = [s.lower() for s in (seeds or [])]
+    stats = {"seeds": 0, "from_hashtags": 0, "from_search": 0, "cost": 0.0}
+
+    def left():
+        return max(budget.FREE_CREDIT_USD - vault.month_spend(now), 0.0)
+
+    def charged(kind, info, n):
+        c = info.get("usage_usd") if info.get("usage_usd") is not None else n / 1000 * plan.price
+        vault.record_run(kind, c, n, f"{topic}; " + ("reported by Apify" if info.get("usage_usd") is not None else "ESTIMATED"), now)
+        stats["cost"] += c
+
+    profiles: dict[str, dict] = {}
+
+    def add(found, key):
+        for p in found:
+            name = str(p.get("username") or "").lower()
+            if name and name not in profiles:
+                profiles[name] = p
+                stats[key] += 1
+
+    candidates: list[str] = []
+    if harvester is not None:
+        progress("Finding the creators behind the most-played Reels on this topic…")
+        try:
+            hits, info = harvester(default_keywords(topic)[:HASHTAG_SEARCHES], apify_cfg, token, None, [], per_keyword=HASHTAG_PER_SEARCH, per_creator=0,
+                                   run_cap_usd=budget.per_run_cap(left(), 3))
+            charged("topic-creators-hashtags", info, len(hits))
+            best: dict[str, int] = {}
+            for r in hits:
+                best[r.account.lower()] = max(best.get(r.account.lower(), 0), r.plays)
+            candidates = [a for a, _ in sorted(best.items(), key=lambda kv: -kv[1]) if a not in seeds and a != "unknown"][:HASHTAG_CANDIDATES]
+        except Exception as exc:
+            progress(f"Hashtag discovery failed ({type(exc).__name__}: {exc}); continuing without it.")
+    wanted = seeds + candidates
+    if wanted and detailer is not None:
+        progress(f"Reading the profiles and latest Reels of {len(wanted)} creators…")
+        try:
+            got, info = detailer(wanted, apify_cfg, token, run_cap_usd=budget.per_run_cap(left(), 2))
+            charged("topic-creators-profiles", info, len(got))
+            by = {str(p.get("username") or "").lower(): p for p in got}
+            add([by[h] for h in seeds if h in by], "seeds")
+            add([by[h] for h in candidates if h in by], "from_hashtags")
+            missing = [h for h in seeds if h not in by]
+            if missing:
+                progress("No profile came back for: " + ", ".join(missing) + " (private, misspelt, or blocked).")
+        except Exception as exc:
+            progress(f"Reading profiles failed ({type(exc).__name__}: {exc}); continuing without it.")
+    progress(f"Searching Instagram by name for creators ({len(plan.keywords)} searches)…")
+    found, info = discoverer(plan.keywords, apify_cfg, token, per_query=plan.per_keyword, run_cap_usd=budget.per_run_cap(left(), len(plan.keywords)))
+    charged("topic-creators", info, info.get("items", len(found)))
+    add(found, "from_search")
+    reels = [r for p in profiles.values() for r in profile_to_reels(p, topic)]
     vault.upsert_reels(reels, now)
-    cost = info.get("usage_usd") if info.get("usage_usd") is not None else info.get("items", len(profiles)) / 1000 * plan.price
-    vault.record_run("topic-creators", cost, info.get("items", len(profiles)),
-                     f"{topic}; " + ("reported by Apify" if info.get("usage_usd") is not None else "ESTIMATED"), now)
-    return {"creators": len(profiles), "reels": len(reels), "cost": round(cost, 4)}
+    return {"creators": len(profiles), "reels": len(reels), "cost": round(stats["cost"], 4), **{k: v for k, v in stats.items() if k != "cost"}}
 
 
-def creator_board(vault, topic: str, top: int = 10) -> dict:
+def creator_board(vault, topic: str, top: int = 10, keep: set | None = None) -> dict:
     """The topic's strongest creators from the saved Reels. Ranked by median plays within each size tier, so micro-creators
     are shown next to the big names instead of being buried by them."""
     by: dict[str, list[Reel]] = {}
@@ -128,7 +196,8 @@ def creator_board(vault, topic: str, top: int = 10) -> dict:
         rows.append({"username": name, "followers": f, "tier": tier(f), "reels": len(rs), "median_plays": med, "best_plays": best.plays,
                      "best_link": best.url, "reach": round(med / f, 2) if f else None})
     found_all = len(rows)
-    rows = [r for r in rows if r["reels"] >= 3 and (r["followers"] or 0) >= MIN_FOLLOWERS and r["median_plays"] >= MIN_MEDIAN_PLAYS]
+    keep = {k.lower() for k in (keep or ())}      # creators the user named skip the size and plays floors (they chose them), not the 3-Reels one
+    rows = [r for r in rows if r["reels"] >= 3 and (r["username"] in keep or ((r["followers"] or 0) >= MIN_FOLLOWERS and r["median_plays"] >= MIN_MEDIAN_PLAYS))]
     rows.sort(key=lambda r: -r["median_plays"])
     chosen = []
     for t, q in TIER_QUOTA.items():
@@ -369,13 +438,13 @@ def summarise(cards: list[dict]) -> dict:
 
 # ---------------------------------------------------------------------------- the run
 def decode_top(vault, topic: str, llm: LLM, vocab: dict, *, days: int = 7, top: int = 10, frames=None, transcriber=None,
-               min_plays: int = 1000, now=None, settings: dict | None = None, brand: dict | None = None, creators: bool = False) -> dict:
+               min_plays: int = 1000, now=None, settings: dict | None = None, brand: dict | None = None, creators: bool = False, seeds: list[str] | None = None) -> dict:
     from .transcribe import ensure_transcripts
     t = (settings or {}).get("outliers", {})
     reels = vault.reels()
     outs, stats = find_outliers(reels, niche=topic, days=days, min_plays=min_plays, k_usual=t.get("k_usual", 3.0),
                                 k_followers=t.get("k_followers", 5.0), min_reels=t.get("min_reels_for_usual", 5), usual_days=t.get("usual_days", 180), now=now)
-    board = creator_board(vault, topic) if creators else None
+    board = creator_board(vault, topic, keep=set(seeds or ())) if creators else None
     if board is not None:           # only creators who passed the floor: a 1,200-play Reel from a hobby account is noise, not a winner
         ok_accounts = set(board["eligible"])
         outs = [o for o in outs if o.reel.account.lower() in ok_accounts]
