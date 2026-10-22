@@ -147,7 +147,7 @@ function render(res, topic) {
   if (res.undated) r.append(el("div", { class: "note", text: `${res.undated} Reel(s) had no posting date, so the time window could not be checked for them.` }));
   const st = res.stats;
   r.append(el("p", { class: "small", text: `${st.considered} Reels in the window, ${st.outliers} outliers (${st.strong} strong). Strong = beat that creator's own median by 3× or more (needs 5 of that creator's Reels from the last 180 days). ${st.creators_with_a_usual} creator(s) in the saved data have that baseline. Weak = no baseline, so small accounts can spike for reasons unrelated to the content.` }));
-  if (!res.cards.length) { r.append(el("p", { text: "No outliers found. Try a wider window, a broader topic, or harvest more." })); return; }
+  if (!res.cards.length) { r.append(el("p", { text: res.creator_board ? "No Reel beat its creator's usual by 3× or more. See the creators table above; try another topic." : "No outliers found. Try a wider window, a broader topic, or harvest more." })); return; }
   if (s.n) {
     r.append(el("div", { class: "box" }, el("b", { text: "What the top Reels have in common" }),
       el("div", { class: "summary" },

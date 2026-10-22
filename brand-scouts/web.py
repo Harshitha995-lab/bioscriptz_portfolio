@@ -141,6 +141,8 @@ class App:
         creators = creators and not brand
         if days not in (7, 14, 30):
             raise ValueError("Pick 7, 14 or 30 days.")
+        if creators and not brand_raw:
+            days = 90           # a profile only returns its latest dozen posts, which span weeks: a 7-day window would hide nearly all of them
         if reuse and not self.sample and not self.cached(topic):
             raise ValueError("There are no saved Reels for this topic (or they are over a week old). Run a new search.")
         if not self.sample and not confirm and not reuse:
