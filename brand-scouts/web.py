@@ -133,7 +133,9 @@ class App:
             except ValueError:
                 ai = "invalid"
             return {"sample": self.sample, "ai": ai, "month_spent": round(v.month_spend(self.now), 2), "free_credit": 5.0,
-                    "topics": v.get_meta("topics", []), "setup_issue": self.live_ready()}
+                    "topics": v.get_meta("topics", []),
+                    "seeds": {t["topic"].lower(): v.get_meta("seeds:" + slug(t["topic"]), []) for t in v.get_meta("topics", []) if t["topic"].endswith("(creators)")},
+                    "setup_issue": self.live_ready()}
 
     def saved(self, topic: str) -> dict | None:
         with self.vault() as v:
@@ -222,6 +224,8 @@ class App:
                 out["sample"] = self.sample
                 out["warning"] = warn
                 v.set_meta("research:" + slug(topic), out)
+                if creators:
+                    v.set_meta("seeds:" + slug(topic), seeds or [])
                 topics = [t for t in v.get_meta("topics", []) if t["topic"].lower() != topic.lower()]
                 v.set_meta("topics", [{"topic": topic, "at": now.isoformat(), "days": days}] + topics[:19])
                 job["result"] = out

@@ -37,6 +37,10 @@ async function loadSaved(topic) {
 
 const mode = () => document.querySelector('input[name="mode"]:checked').value;
 const isCreators = () => mode() === "creators";
+$("topic").addEventListener("change", () => {      // bring back the creator list saved for this topic
+  const saved = (state.seeds || {})[`${$("topic").value.trim().toLowerCase()} (creators)`];
+  if (saved && saved.length && !$("seeds").value.trim()) $("seeds").value = saved.map((h) => "@" + h).join(", ");
+});
 const seeds = () => (isCreators() ? $("seeds").value : "");
 function brandPayload() {
   if (mode() !== "brand") return null;
@@ -104,7 +108,7 @@ function hookRows(h) {
 }
 
 function card(c, i, topic) {
-  const head = el("h3", {}, `${i}. @${c.creator}`, el("span", { class: "tag " + (c.strong ? "strong" : ""), text: c.strong ? "strong outlier" : "weak basis" }));
+  const head = el("h3", {}, `${i}. @${c.creator}`, el("span", { class: "tag " + (c.strong ? "strong" : ""), text: c.grade === "winning" ? "winning outlier (5×+)" : c.strong ? "above-average outlier (3–5×)" : "weak basis" }));
   const meta = el("div", { class: "meta", text: `${fmt(c.plays)} plays · ${c.basis}${c.followers ? ` · ${fmt(c.followers)} followers` : ""}` });
   if (c.error) return el("div", { class: "card" }, head, meta, el("p", { class: "err", text: "Breakdown unavailable: " + c.error }), linkRow(c));
   const rr = c.rate_of_revelation;

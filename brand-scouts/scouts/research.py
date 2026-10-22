@@ -365,6 +365,7 @@ def decode(outlier: Outlier, bd: ViralBreakdown) -> dict:
     r = outlier.reel
     base = {"reel_id": r.id, "creator": r.account, "followers": r.followers, "link": r.url, "plays": r.plays, "likes": r.likes,
             "comments": r.comments, "tier": tier(r.followers) if r.followers else None, "ratio": round(outlier.ratio, 1), "strong": outlier.strong,
+            "grade": "winning" if outlier.strong and outlier.ratio >= WINNING_RATIO else "above average" if outlier.strong else "weak basis",
             "basis": f"{outlier.ratio:.0f}× this creator's usual {outlier.usual:,.0f} plays" if outlier.strong
             else (f"{outlier.ratio:.0f}× their follower count (no creator baseline yet; treat as a lead)" if outlier.basis == "followers"
                   else f"{outlier.ratio:.0f}× the typical Reel in this search (no creator baseline or follower count; treat as a lead)"),
@@ -383,6 +384,7 @@ def decode(outlier: Outlier, bd: ViralBreakdown) -> dict:
             "spice": bd.spice, "evidence": bd.evidence}
 
 
+WINNING_RATIO = 5.0       # 3-5x the creator's own median is 'above average'; 5x and over is a winning outlier
 MIN_PATTERN = 3        # fewer Reels than this in a group is not a pattern
 
 

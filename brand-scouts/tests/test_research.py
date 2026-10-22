@@ -251,6 +251,8 @@ class Web(unittest.TestCase):
         self.assertEqual(cards[0]["creator"], "tiny")                             # the 50,000-play Reel vs its usual 2,000
         self.assertTrue(cards[0]["strong"])
         self.assertEqual(cards[0]["tier"], "micro")
+        self.assertEqual(cards[0]["grade"], "winning")                            # 50,000 vs a usual of 2,000
+        self.assertEqual(self.call("/api/state")[1]["seeds"], {"ghostwriting (creators)": []})
         with Vault(self.dir / "v.db") as v:
             self.assertAlmostEqual(v.month_spend(NOW), 0.01)
             ids = {r.id for r in v.reels("ghostwriting (creators)")}
