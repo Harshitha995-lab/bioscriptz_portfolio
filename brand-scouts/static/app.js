@@ -150,6 +150,12 @@ function render(res, topic) {
   r.append(el("h2", { text: `Top outliers for “${res.topic}” — last ${res.days} days` }));
   if (res.sample) r.append(el("div", { class: "note", text: "SAMPLE: synthetic data and a rule-based stand-in analyst. This shows the layout, not real findings." }));
   if (res.warning) r.append(el("div", { class: "note", text: res.warning }));
+  const t = res.transcripts;
+  if (t && !res.sample) {
+    const bad = t.failed || t.skipped;
+    r.append(el("div", { class: bad ? "note" : "small", text: `Transcripts: ${t.transcribed} made now, ${t.already_had} already saved, ${t.failed} failed, ${t.skipped} skipped.` +
+      (t.error ? ` First error: ${t.error}` : "") + (t.reason ? ` Reason: ${t.reason}.` : "") }));
+  }
   if (res.undated) r.append(el("div", { class: "note", text: `${res.undated} Reel(s) had no posting date, so the time window could not be checked for them.` }));
   const st = res.stats;
   r.append(el("p", { class: "small", text: `${st.considered} Reels in the window, ${st.outliers} outliers (${st.strong} strong). Strong = beat that creator's own median by 3× or more (needs 5 of that creator's Reels from the last 180 days). ${st.creators_with_a_usual} creator(s) in the saved data have that baseline. Weak = no baseline, so small accounts can spike for reasons unrelated to the content.` }));
