@@ -135,7 +135,7 @@ def creator_board(vault, topic: str, top: int = 10) -> dict:
         chosen += [r for r in rows if r["tier"] == t][:q]
     chosen += [r for r in rows if r not in chosen][:max(top - len(chosen), 0)]
     chosen = sorted(chosen, key=lambda r: -r["median_plays"])[:top]
-    return {"creators": chosen, "found": len(rows), "searched": found_all, "tiers": {t: sum(1 for r in rows if r["tier"] == t) for t, _ in TIERS},
+    return {"creators": chosen, "eligible": [r["username"] for r in rows], "found": len(rows), "searched": found_all, "tiers": {t: sum(1 for r in rows if r["tier"] == t) for t, _ in TIERS},
             "note": "Ranked by median plays of their recent Reels (the usual, not one lucky post). Followers come from Instagram at fetch time."}
 
 
@@ -334,7 +334,8 @@ def winning_formats(cards: list[dict]) -> dict:
             continue
         formats: dict[tuple, list[dict]] = {}
         for c in cs:
-            ht = c["hook"]["audio"]["type"] if c["hook"]["audio"]["analysed"] else "no transcript"
+            a, t = c["hook"]["audio"], c["hook"]["text"]
+            ht = a["type"] if a["analysed"] else (f"on-screen {t['type']}" if t["analysed"] and t["type"] != "none" else "hook not analysed")
             formats.setdefault((c["content_angle"], ht), []).append(c)
         rows = []
         for (angle, ht), members in sorted(formats.items(), key=lambda kv: (-len(kv[1]), kv[0])):
@@ -374,6 +375,10 @@ def decode_top(vault, topic: str, llm: LLM, vocab: dict, *, days: int = 7, top: 
     reels = vault.reels()
     outs, stats = find_outliers(reels, niche=topic, days=days, min_plays=min_plays, k_usual=t.get("k_usual", 3.0),
                                 k_followers=t.get("k_followers", 5.0), min_reels=t.get("min_reels_for_usual", 5), usual_days=t.get("usual_days", 180), now=now)
+    board = creator_board(vault, topic) if creators else None
+    if board is not None:           # only creators who passed the floor: a 1,200-play Reel from a hobby account is noise, not a winner
+        ok_accounts = set(board["eligible"])
+        outs = [o for o in outs if o.reel.account.lower() in ok_accounts]
     chosen = outs[:top]
     tstats = ensure_transcripts([o.reel for o in chosen], transcriber)
     for o in chosen:
@@ -390,7 +395,6 @@ def decode_top(vault, topic: str, llm: LLM, vocab: dict, *, days: int = 7, top: 
     if brand is not None:
         ignore = {w for w in re.split(r"\W+", (brand["brand"] + " " + brand["category"]).lower()) if w} | {re.sub(r"[^a-z0-9]", "", brand["brand"].lower())}
         audience = audience_section(vault, topic, llm, ignore | {brand["own"], *brand["competitors"]} - {""})
-    board = creator_board(vault, topic) if creators else None
     return {"brand": brand, "audience": audience, "creator_board": board, "formats": winning_formats(cards) if creators else None, "topic": topic, "days": days, "generated_at": (now or utcnow()).isoformat(), "stats": stats, "cards": cards,
             "summary": summarise(cards), "transcripts": tstats,
             "frames": any("frames" in b.evidence for b in bds.values() if not b.error),

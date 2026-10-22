@@ -247,6 +247,7 @@ class Web(unittest.TestCase):
         self.assertNotIn("flop", names)                                           # usual under 1,000 plays
         self.assertTrue(done["result"]["formats"]["groups"])
         cards = done["result"]["cards"]
+        self.assertNotIn("hobby", {c["creator"] for c in cards})                  # outliers only from creators who passed the floor
         self.assertEqual(cards[0]["creator"], "tiny")                             # the 50,000-play Reel vs its usual 2,000
         self.assertTrue(cards[0]["strong"])
         self.assertEqual(cards[0]["tier"], "micro")
@@ -260,7 +261,7 @@ class Web(unittest.TestCase):
     def test_winning_formats_groups_by_tier(self):
         def card(creator, tier, angle, ratio, ht="bold-claim"):
             return {"creator": creator, "tier": tier, "content_angle": angle, "ratio": ratio, "link": "https://www.instagram.com/reel/x/", "structure": ["hook", "point"],
-                    "hook": {"audio": {"analysed": True, "type": ht}}, "rate_of_revelation": {"per_10s": 2.0}, "cta": {"type": "none"}, "contrarian": {"value": False}}
+                    "hook": {"audio": {"analysed": True, "type": ht}, "text": {"analysed": False, "type": "unknown"}}, "rate_of_revelation": {"per_10s": 2.0}, "cta": {"type": "none"}, "contrarian": {"value": False}}
         cards = [card("a", "micro", "List / how-to", 9), card("b", "micro", "List / how-to", 20), card("c", "micro", "List / how-to", 5),
                  card("d", "big", "Story / confession", 4), {"error": "x", "tier": "big"}]
         f = research.winning_formats(cards)
@@ -270,6 +271,12 @@ class Web(unittest.TestCase):
         self.assertFalse(g["big"]["enough"])                       # one Reel is not a pattern
         self.assertEqual(g["micro"]["formats"][0]["count"], 3)
         self.assertEqual(g["micro"]["formats"][0]["example_creator"], "b")      # strongest Reel of the format
+
+    def test_formats_fall_back_to_on_screen_hook_without_transcript(self):
+        c = {"creator": "a", "tier": "micro", "content_angle": "List / how-to", "ratio": 5, "link": "https://www.instagram.com/reel/x/", "structure": ["hook"],
+             "hook": {"audio": {"analysed": False, "type": "unknown"}, "text": {"analysed": True, "type": "number-list"}},
+             "rate_of_revelation": {"per_10s": None}, "cta": {"type": "none"}, "contrarian": {"value": False}}
+        self.assertEqual(research.winning_formats([c])["groups"][0]["formats"][0]["spoken_hook"], "on-screen number-list")
 
     def test_tier_cutoffs(self):
         self.assertEqual([research.tier(f) for f in (None, 9_999, 10_000, 99_999, 100_000)], ["micro", "micro", "small", "small", "big"])

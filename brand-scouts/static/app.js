@@ -180,7 +180,7 @@ function formatsBox(f) {
   const box = el("div", { class: "box" }, el("h2", { text: "Winning formats" }));
   for (const g of f.groups) {
     box.append(el("h3", { text: `${g.group === "all" ? "All sizes" : g.group + " creators"} — ${g.n} Reels${g.enough ? "" : " (too few to call a pattern)"}` }));
-    const tbl = el("table", {}, el("tr", {}, ...["Format (angle + spoken hook)", "Reels", "Example", "Structure"].map((h) => el("th", { text: h }))));
+    const tbl = el("table", {}, el("tr", {}, ...["Format (angle + hook)", "Reels", "Example", "Structure"].map((h) => el("th", { text: h }))));
     for (const x of g.formats) {
       tbl.append(el("tr", {}, el("td", { text: `${x.angle} + ${x.spoken_hook}` }), el("td", { text: String(x.count) }),
         el("td", {}, LINK_OK.test(x.example_link) ? el("a", { href: x.example_link, target: "_blank", rel: "noopener noreferrer", text: "@" + x.example_creator }) : "@" + x.example_creator),
