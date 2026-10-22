@@ -32,6 +32,9 @@ def slug(topic: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", topic.lower()).strip("-")[:60] or "topic"
 
 
+CREATOR_MIN_PLAYS = 10_000     # in Creators mode an outlier must also be a big Reel in absolute terms, not a 1,200-play spike
+
+
 class App:
     def __init__(self, vault_path: Path, sample: bool, harvester=None, llm=None, now=None, max_run_usd: float = 1.5, discoverer=None, detailer=None):
         self.vault_path, self.sample, self.harvester, self.llm, self.now = vault_path, sample, harvester, llm, now
@@ -214,7 +217,8 @@ class App:
                         say(warn)
                 say("Finding outliers and decoding the top 10…")
                 out = research.decode_top(v, topic, self.get_llm("analysis"), vocab, days=days, frames=frames, transcriber=transcriber,
-                                          now=now, settings=self.settings["agent"], brand=brand, creators=creators, seeds=seeds, top=12 if creators else 10)
+                                          now=now, settings=self.settings["agent"], brand=brand, creators=creators, seeds=seeds, top=12 if creators else 10,
+                                          min_plays=CREATOR_MIN_PLAYS if creators else 1000)
                 out["sample"] = self.sample
                 out["warning"] = warn
                 v.set_meta("research:" + slug(topic), out)
