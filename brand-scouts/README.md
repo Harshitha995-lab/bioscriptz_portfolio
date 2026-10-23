@@ -241,3 +241,23 @@ Then:
 
 Limits: one user search returns the profile's latest posts only (about a dozen), so "usual" is based on those. The
 winning-format roll-up (by creator size) is descriptive, built from the decoded top 12 Reels; the stronger comparison against ordinary Reels is still `agent.py analyse`.
+
+## The strategy workbook (the new home page)
+
+`python web.py` now opens **Bioscriptz**: type a brand and category, get a 9-sheet workbook in 5 steps. The old
+topic / brand / creators page is still at `/classic`.
+
+| Step | Sheets | Where the data comes from |
+|---|---|---|
+| Research | 1 Competitor, 2 Brand & product, 3 Market & customer, 4 Outlier data | Websites you give (facts kept only if their quote is on the page), real Instagram comments, Reels decoded as before |
+| Audience avatar | 5 Awareness map, 6 Avatars | The comments, sorted into the five awareness stages (counted in code); avatars written from them, quoting stored comments |
+| Ideation | 7 Ideation SOP | Winning structures x audience segments. **You approve each idea before anything is scripted** |
+| Script | 8 Script & storyboard | A shot list per approved idea. Numbers not found in your inputs are flagged for you to check |
+| Presentation | 9 Presentation pack | Assembled from the above; **Export .xlsx** downloads all nine sheets |
+
+What is deliberately not there: ad hooks, reviews and complaints for competitors (not collected yet), Reddit and
+review-site quotes, and any virality score (there is no past performance data to base one on). Empty sheets say so
+instead of filling themselves with invented rows.
+
+Cost: only the research step spends Apify credit (the brand-mode estimate, shown before you confirm). Everything else uses
+your Gemini or Claude key. Needs `pip install openpyxl` for the export.

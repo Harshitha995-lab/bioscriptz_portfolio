@@ -3,7 +3,7 @@ apify-client
 anthropic
 # Local speech-to-text for transcripts (runs on your computer, free; downloads a model of a few hundred MB the first time)
 faster-whisper
-# Optional: Excel export
+# Excel export of the strategy workbook
 openpyxl
 # Optional: Google Gemini (free tier) instead of Claude. Set LLM_PROVIDER=gemini in .env
 google-genai

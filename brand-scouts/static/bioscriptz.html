@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bioscriptz</title>
+<link rel="stylesheet" href="/bioscriptz.css">
+</head>
+<body>
+<header class="top"><div class="wrap topin" id="topbar"></div></header>
+<main class="wrap" id="app"></main>
+<aside id="drawer" aria-label="Video breakdown"></aside>
+<div id="brandpanel" class="card" role="dialog" aria-label="Brand colors" hidden>
+ <h4>Brand colors</h4>
+ <p class="muted m0">Paste your hex codes. Use mid or light shades for accent and highlight so text stays readable.</p>
+ <label class="brow"><span>Primary<br><small>buttons, logo, checkboxes</small></span><input type="color" id="bc-violet" data-brand="violet" aria-label="Primary color"><input type="text" id="bt-violet" data-brandtext="violet" maxlength="7" aria-label="Primary hex"></label>
+ <label class="brow"><span>Accent<br><small>chips, highlights</small></span><input type="color" id="bc-pink" data-brand="pink" aria-label="Accent color"><input type="text" id="bt-pink" data-brandtext="pink" maxlength="7" aria-label="Accent hex"></label>
+ <label class="brow"><span>Highlight<br><small>sticky notes, active tabs</small></span><input type="color" id="bc-yellow" data-brand="yellow" aria-label="Highlight color"><input type="text" id="bt-yellow" data-brandtext="yellow" maxlength="7" aria-label="Highlight hex"></label>
+ <div class="row"><button class="btn sm" data-act="brand-reset">Reset</button><button class="btn sm on" data-act="brand">Done</button></div>
+</div>
+<div id="toast" role="status"></div>
+<script src="/bioscriptz.js"></script>
+</body>
+</html>

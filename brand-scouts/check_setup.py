@@ -32,7 +32,7 @@ def main() -> int:
         row(False, str(exc), "Set LLM_PROVIDER=anthropic or LLM_PROVIDER=gemini in .env")
     for mod, pipname, needed in (("apify_client", "apify-client", True), ("anthropic", "anthropic", which == "anthropic"),
                                  ("google.genai", "google-genai", which == "gemini"), ("faster_whisper", "faster-whisper", True),
-                                 ("openpyxl", "openpyxl", False)):
+                                 ("openpyxl", "openpyxl", True)):
         try:
             found = importlib.util.find_spec(mod) is not None
         except ModuleNotFoundError:          # a dotted name whose parent package is missing

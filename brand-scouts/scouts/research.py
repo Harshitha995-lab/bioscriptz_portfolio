@@ -364,7 +364,8 @@ def contrarian_take(bd: ViralBreakdown) -> dict:
 def decode(outlier: Outlier, bd: ViralBreakdown) -> dict:
     r = outlier.reel
     base = {"reel_id": r.id, "creator": r.account, "followers": r.followers, "link": r.url, "plays": r.plays, "likes": r.likes,
-            "comments": r.comments, "tier": tier(r.followers) if r.followers else None, "ratio": round(outlier.ratio, 1), "strong": outlier.strong,
+            "comments": r.comments, "usual": round(outlier.usual) if outlier.strong and outlier.usual else None,
+            "transcript": (r.transcript or "")[:4000], "tier": tier(r.followers) if r.followers else None, "ratio": round(outlier.ratio, 1), "strong": outlier.strong,
             "grade": "winning" if outlier.strong and outlier.ratio >= WINNING_RATIO else "above average" if outlier.strong else "weak basis",
             "basis": f"{outlier.ratio:.0f}× this creator's usual {outlier.usual:,.0f} plays" if outlier.strong
             else (f"{outlier.ratio:.0f}× their follower count (no creator baseline yet; treat as a lead)" if outlier.basis == "followers"

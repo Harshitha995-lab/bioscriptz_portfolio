@@ -42,7 +42,42 @@ class FakeLLM:
                     "caveats": ["Sample data; rule-based text, not a real analysis.", "One pair cannot prove cause."]}
         if "[TASK:explain]" in system:
             return self._explain(data)
+        if "[TASK:awareness]" in system:
+            return {"labels": [{"i": c["i"], "stage": self._stage(c["text"])} for c in data["comments"]]}
+        if "[TASK:avatar]" in system:
+            first = data["comments"][0]["text"] if data["comments"] else ""
+            return {"name": "[sample] segment", "problem": f"[sample] Said in the comments: {first[:80]}", "belief": "[sample] rule-based text",
+                    "objection": "[sample] rule-based text", "formats": ["[sample] explainer", "[sample] comparison"], "quote": 0}
+        if "[TASK:ideation]" in system:
+            segs = [x["name"] for x in data.get("segments", [])]
+            refs = data["references"]
+            return {"ideas": [{"format": "[sample] talking head", "angle": f"[sample] angle {k + 1}", "hook": f"[sample] A brand new hook number {k + 1} for {data['brand'].get('brand', 'the brand')}",
+                               "message": "[sample] one clear message", "proof": "[sample] bring a real before and after from your own work", "cta": "[sample] save this",
+                               "visual": "[sample] clean framing, window light", "avatar": segs[k % len(segs)] if segs else "", "goal": "Awareness",
+                               "source": refs[k % len(refs)]["i"]} for k in range(min(data["n"], 4))]}
+        if "[TASK:storyboard]" in system:
+            return {"storyline": "[sample] hook, tension, message, proof, CTA", "tone": "[sample] plain and short",
+                    "shots": [{"line": f"[sample] line {k + 1}", "shot_type": "Medium shot", "angle": "Eye level", "action": "[sample] speak to camera", "location": "Desk",
+                               "prop": "None", "equipment": "Phone, tripod", "cut": "Hard cut", "on_screen_text": "", "sound": "None"} for k in range(5)],
+                    "needs_from_you": ["[sample] your real proof"]}
+        if "[TASK:site]" in system:
+            ev = data["page_text"][:40]
+            return {"positioning": {"value": "[sample] as described on the page", "evidence": ev}, "hero_product": {"value": "", "evidence": ""},
+                    "price": {"value": "", "evidence": ""}, "claims": [{"value": "[sample] a claim", "evidence": ev}], "tone": {"value": "", "evidence": ""}}
         raise ValueError("unknown task")
+
+    @staticmethod
+    def _stage(text: str) -> int:
+        t = text.lower()
+        if re.search(r"where (can|do) i (buy|get)|reorder|ordered|link please", t):
+            return 4
+        if re.search(r"\bvs\b|better than|compare|worth", t):
+            return 3
+        if re.search(r"\bhow\b|which|recommend|what should", t):
+            return 2
+        if re.search(r"struggl|hate|tired|problem|can't|cannot|wasted|stuck", t):
+            return 1
+        return 0
 
     # (topic, angle) -> fit. Anything not listed gets a middling 55. Sample data only.
     FIT = {
