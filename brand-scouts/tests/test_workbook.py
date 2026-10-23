@@ -232,6 +232,23 @@ class Flow(unittest.TestCase):
             time.sleep(0.1)
         self.assertEqual(len(seen), 1)
 
+    def test_ledger_catches_up_with_apifys_own_usage_figure(self):
+        import os
+        os.environ["APIFY_TOKEN"] = "t"
+        self.addCleanup(os.environ.pop, "APIFY_TOKEN", None)
+        app = web.App(self.dir / "u.db", False, llm=FakeLLM(), now=NOW)
+        app.usage_probe = lambda token: 4.2
+        self.assertEqual(app.state()["month_spent"], 4.2)               # runs made in the Apify console are counted too
+        app._usage_at = 0.0
+        app.usage_probe = lambda token: 1.0                            # a lower figure never reduces the ledger
+        self.assertEqual(app.state()["month_spent"], 4.2)
+        app._usage_at = 0.0
+
+        def boom(token):
+            raise RuntimeError("no network")
+        app.usage_probe = boom
+        self.assertEqual(app.state()["month_spent"], 4.2)               # a failed lookup is silent
+
     def test_rejects_bad_workbook_input(self):
         self.assertEqual(self.call("/api/wb/start", {"brand": "", "category": "x"})[0], 400)
         self.assertEqual(self.call("/api/wb/start", {"brand": "B", "category": "c", "watch": "bad handle!"})[0], 400)

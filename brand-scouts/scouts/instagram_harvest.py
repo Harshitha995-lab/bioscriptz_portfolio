@@ -404,3 +404,27 @@ def harvest_comments(urls: list[str], cfg: dict, token: str, per_post: int = 25,
         post = str(item.get("postUrl") or item.get("inputUrl") or item.get("parentUrl") or item.get("url") or "")
         out.append({"text": text[:300], "owner": str(owner or "").lower(), "post": post})
     return out, {"items": len(out), "usage_usd": usage}
+
+
+def apify_month_usage(token: str) -> float | None:
+    """What Apify itself says this account has used this billing month (USD), or None if it cannot be read.
+    The app's own ledger only knows runs it started, not test runs made in the Apify console."""
+    from apify_client import ApifyClient
+
+    lim = ApifyClient(token).user("me").limits()
+
+    def dig(obj, *names):
+        for n in names:
+            if obj is None:
+                return None
+            obj = obj.get(n) if isinstance(obj, dict) else getattr(obj, n, None)
+        return obj
+    if not isinstance(lim, dict) and hasattr(lim, "model_dump"):
+        lim = lim.model_dump(by_alias=False)
+    val = dig(lim, "current", "monthlyUsageUsd")
+    if val is None:
+        val = dig(lim, "current", "monthly_usage_usd")
+    try:
+        return float(val) if val is not None else None
+    except (TypeError, ValueError):
+        return None

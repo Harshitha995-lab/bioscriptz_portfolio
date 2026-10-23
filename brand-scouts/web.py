@@ -40,6 +40,8 @@ class App:
         self.vault_path, self.sample, self.harvester, self.llm, self.now = vault_path, sample, harvester, llm, now
         self.discoverer, self.detailer = discoverer, detailer
         self.fetcher = None            # stand-in for workbook.fetch_text in tests
+        self.usage_probe = None        # stand-in for instagram_harvest.apify_month_usage in tests
+        self._usage_at = 0.0
         self.commenter = None          # stand-in for instagram_harvest.harvest_comments in tests
         self.max_run_usd = max_run_usd
         self.settings = load_json(ROOT / "config" / "settings.json")
@@ -62,6 +64,29 @@ class App:
             return FakeLLM()
         from scouts.llm import make_llm
         return make_llm(task, self.settings)
+
+    def sync_usage(self) -> None:
+        """Make the spend ledger at least as large as Apify's own figure, so the budget guard sees runs made outside this app.
+        Reads Apify at most once a minute and never fails the caller."""
+        import time
+        token = os.environ.get("APIFY_TOKEN")
+        if self.sample or not token or time.time() - self._usage_at < 60:
+            return
+        self._usage_at = time.time()
+        try:
+            probe = self.usage_probe
+            if probe is None:
+                from scouts.instagram_harvest import apify_month_usage as probe
+            real = probe(token)
+            if real is None:
+                return
+            now = self.now or utcnow()
+            with self.vault() as v:
+                diff = real - v.month_spend(now)
+                if diff > 0.005:
+                    v.record_run("apify-sync", diff, 0, "difference between Apify's own usage figure and what this app recorded", now)
+        except Exception:
+            pass
 
     def live_ready(self) -> str:
         """'' when a live run can start, else the thing the user must fix."""
@@ -96,6 +121,7 @@ class App:
         return topic, None, research.default_keywords(topic)
 
     def plan(self, topic: str, brand_raw=None, creators: bool = False, seeds=None, extra_n: int = 0) -> dict:
+        self.sync_usage()
         topic, brand, kws = self.resolve(topic, brand_raw, creators)
         with self.vault() as v:
             spent = v.month_spend(self.now)
@@ -128,6 +154,7 @@ class App:
 
     # -- state
     def state(self) -> dict:
+        self.sync_usage()
         with self.vault() as v:
             from scouts.llm import provider
             try:
