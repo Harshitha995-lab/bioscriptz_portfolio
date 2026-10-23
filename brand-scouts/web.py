@@ -40,6 +40,7 @@ class App:
         self.vault_path, self.sample, self.harvester, self.llm, self.now = vault_path, sample, harvester, llm, now
         self.discoverer, self.detailer = discoverer, detailer
         self.fetcher = None            # stand-in for workbook.fetch_text in tests
+        self.commenter = None          # stand-in for instagram_harvest.harvest_comments in tests
         self.max_run_usd = max_run_usd
         self.settings = load_json(ROOT / "config" / "settings.json")
         self.jobs: dict[str, dict] = {}
@@ -166,7 +167,7 @@ class App:
         threading.Thread(target=self._run, args=(job, topic, days, brand, reuse, creators, seeds), daemon=True).start()
         return job_id
 
-    def _research(self, say, topic: str, days: int, brand: dict | None = None, reuse: bool = False, creators: bool = False, seeds=None, watch=None) -> dict:
+    def _research(self, say, topic: str, days: int, brand: dict | None = None, reuse: bool = False, creators: bool = False, seeds=None, watch=None, comments: bool = False) -> dict:
         """The research pipeline shared by the classic page and the workbook. Returns the decoded result and saves it in the vault."""
         now = self.now or utcnow()
         vocab = __import__("scouts.viral_analysis", fromlist=["load_vocab"]).load_vocab()
@@ -184,7 +185,12 @@ class App:
                 v.upsert_reels(reels, now)
                 say("Sample mode: loaded synthetic Reels (they are about personal branding, whatever topic you typed).")
             elif reuse:
-                say("Using the Reels saved earlier. Apify is not called and nothing is charged by Apify.")
+                say("Using the Reels saved earlier. " + ("Only the comments are fetched from Apify." if comments else "Apify is not called and nothing is charged by Apify."))
+                if comments:
+                    from scouts.instagram_harvest import harvest_comments
+                    cres = research.fetch_comments(v, topic, self.apify_cfg(), os.environ.get("APIFY_TOKEN", ""), self.commenter or harvest_comments, say, now,
+                                                   self.apify_cfg().get("price_per_1000_results_usd"))
+                    say(f"Collected {cres['comments']} comments. Cost about ${cres['cost']:.2f}.")
                 frames, transcriber, warn = research.live_media() if self.harvester is None else (None, None, "")
                 if warn:
                     say(warn)
@@ -214,6 +220,11 @@ class App:
                                           priority_creators=extra)
                 v.set_meta("harvested:" + slug(topic), now.isoformat())
                 say(f"Fetched {res['keyword_reels']} Reels and {res['baseline_reels']} baseline Reels. Cost about ${res['cost']:.2f}.")
+                if comments:
+                    from scouts.instagram_harvest import harvest_comments
+                    cres = research.fetch_comments(v, topic, self.apify_cfg(), os.environ.get("APIFY_TOKEN", ""), self.commenter or harvest_comments, say, now,
+                                                   self.apify_cfg().get("price_per_1000_results_usd"))
+                    say(f"Collected {cres['comments']} comments. Cost about ${cres['cost']:.2f}.")
                 frames, transcriber, warn = research.live_media() if self.harvester is None else (None, None, "")
                 if warn:
                     say(warn)
@@ -266,6 +277,11 @@ class App:
         topic, _, _ = self.resolve("", p["brand"])
         plan = self.plan("", p["brand"], extra_n=len(p["watch"]))
         plan["topic"] = topic
+        if not self.sample:
+            extra = research.comments_cost(plan.get("price"))
+            plan["comments_cost"] = extra
+            plan["est_cost"] = round(plan["est_cost"] + extra, 4)
+            plan["message"] = (plan.get("message") or "") + f" Includes about ${extra:.2f} for comments under the top Reels."
         plan["note"] = "The research step is the only one that spends Apify credit. Reading websites and the AI steps use your Gemini or Claude key."
         return plan
 
@@ -283,6 +299,7 @@ class App:
         job = {"id": uuid.uuid4().hex[:12], "status": "running", "messages": [], "step": 0, "wb_id": "", "result": None, "error": ""}
         self.jobs[job["id"]] = job
         self.running = job["id"]
+        p["comments_ok"] = bool(confirm)          # a re-use run fetches comments only when the user also confirmed the small cost
         threading.Thread(target=self._wb_a, args=(job, p, reuse), daemon=True).start()
         return job["id"]
 
@@ -327,7 +344,7 @@ class App:
             wb_id = slug(topic)
             job["wb_id"] = wb_id
             say(f"Researching {brand['brand']} ({brand['category']})…")
-            out = self._research(say, topic, p["days"], brand=brand, reuse=reuse, watch=p["watch"])
+            out = self._research(say, topic, p["days"], brand=brand, reuse=reuse, watch=p["watch"], comments=(not reuse) or p["comments_ok"])
             sites = self._wb_sites(p, say)
             job["step"] = 1
             llm = self.get_llm("analysis")

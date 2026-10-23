@@ -120,6 +120,17 @@ class LiveGlueTests(unittest.TestCase):
         self.assertEqual(run_input["resultsType"], "details")
         self.assertEqual(harvest_profile_details([], self.CFG, "TOKEN"), ([], {"items": 0, "usage_usd": None}))
 
+    def test_comments_by_post_url(self):
+        from scouts.instagram_harvest import harvest_comments
+        old = list(self.PROFILE_ITEMS)
+        self.addCleanup(lambda: self.PROFILE_ITEMS.__setitem__(slice(None), old))
+        self.PROFILE_ITEMS[:] = [{"text": " nice one ", "ownerUsername": "Fan", "postUrl": "https://www.instagram.com/reel/AAA/"}, {"text": ""}, {"nothing": 1}]
+        got, info = harvest_comments(["https://www.instagram.com/reel/AAA/"], self.CFG, "TOKEN", per_post=7)
+        self.assertEqual(got, [{"text": "nice one", "owner": "fan", "post": "https://www.instagram.com/reel/AAA/"}])
+        actor, run_input = self.calls["runs"][0]
+        self.assertEqual((run_input["resultsType"], run_input["resultsLimit"], run_input["directUrls"]), ("comments", 7, ["https://www.instagram.com/reel/AAA/"]))
+        self.assertEqual(harvest_comments([], self.CFG, "TOKEN"), ([], {"items": 0, "usage_usd": None}))
+
     def test_keywords_only(self):
         from scouts.instagram_harvest import harvest
         reels, info = harvest(["#tag", "a term"], self.CFG, "TOKEN")

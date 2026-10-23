@@ -111,7 +111,7 @@ async function planRun() {
       <p class="muted small m0">${esc(plan.note)} Estimated Apify cost $${esc((plan.est_cost ?? 0).toFixed(2))} (month so far $${esc((plan.month_spent ?? 0).toFixed(2))} of $5.00).</p>
       ${plan.cached ? `<p class="small m0">You have ${esc(plan.cached.reels)} saved Reels for this brand (${esc(plan.cached.hours_ago)} hours old).</p>` : ""}
       <div class="row"><button class="btn go" data-act="confirm-run" ${plan.ok ? "" : "disabled"}>Run for about $${esc((plan.est_cost ?? 0).toFixed(2))}</button>
-      ${plan.cached ? `<button class="btn" data-act="reuse-run">Re-use saved Reels (no Apify cost)</button>` : ""}<button class="btn sm" data-act="cancel-plan">Cancel</button></div></div>`;
+      ${plan.cached ? `<button class="btn" data-act="reuse-run">Re-use saved Reels (no Apify cost)</button><button class="btn" data-act="reuse-comments">Re-use saved Reels and fetch comments (about $${esc(((plan.comments_cost) ?? 0.5).toFixed(2))})</button>` : ""}<button class="btn sm" data-act="cancel-plan">Cancel</button></div></div>`;
   } catch (err) { $("#startErr").textContent = err.message; }
 }
 async function startRun(confirm, reuse) {
@@ -149,7 +149,7 @@ function renderRun() {
     <ul class="subs">${SUBS[i].map((t) => `<li><span class="dot ${done ? "d" : running ? "r" : ""}">${done ? "✓" : ""}</span><span class="${done || running ? "" : "muted"}">${esc(t)}</span></li>`).join("")}</ul></div>`;
   }).join("");
   const wb = S.wb;
-  const gateHtml = gate && wb ? `<div class="card gate cols"><div><h3>Your turn: approve the ideas you would shoot</h3><p class="muted mt4">Scripts are only written for approved ideas. ${wb.ideas.length ? "" : "No ideas could be built from this research."}</p></div>
+  const gateHtml = gate && wb ? `<div class="card gate cols"><div><h3>Your turn: approve the ideas you would shoot</h3><p class="muted mt4">Scripts are only written for approved ideas. ${wb.ideas.length ? "" : "No ideas could be built from this research. " + esc(wb.ideas_note || "")}</p></div>
     <div class="ideas">${wb.ideas.map((x, i) => ideaRow(x, i)).join("")}</div>
     <div class="row"><button class="btn go" data-act="approve-go" ${S.approved.size ? "" : "disabled"}>Approve ${S.approved.size} and write scripts</button><button class="btn sm" data-act="gate-all">Select all</button><button class="btn sm" data-act="gate-none">Clear</button></div></div>` : "";
   const errHtml = err ? `<div class="card warnbox cols"><b>This run stopped.</b><p class="m0">${esc(j.error)}</p><p class="m0 muted">Nothing is lost: saved Reels can be re-used on the next run at no Apify cost.</p></div>` : "";
@@ -359,6 +359,7 @@ document.addEventListener("click", async (e) => {
   if (a === "nav") { if (t.dataset.v === "start") { if (S.view === "start") return; S.view = "start"; } else if (S.wb) S.view = "book"; render(); }
   else if (a === "confirm-run") startRun(true, false);
   else if (a === "reuse-run") startRun(false, true);
+  else if (a === "reuse-comments") startRun(true, true);
   else if (a === "cancel-plan") $("#planBox").innerHTML = "";
   else if (a === "open-recent") { try { S.wb = await api("/api/wb?id=" + encodeURIComponent(t.dataset.id)); S.approved = new Set(S.wb.approved); S.view = "book"; S.sheet = 0; render(); } catch (err) { toast(err.message); } }
   else if (a === "step") { S.sheet = STEPS[+t.dataset.i].sheets[0]; render(); }

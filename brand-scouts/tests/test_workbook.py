@@ -102,6 +102,49 @@ class Pieces(unittest.TestCase):
         self.assertEqual(workbook._cell(None), "")
 
 
+class Comments(unittest.TestCase):
+    def setUp(self):
+        from scouts.common import Reel
+        from scouts.vault import Vault
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.v = Vault(self.dir / "v.db")
+        self.addCleanup(self.v.close)
+        self.v.upsert_reels([Reel(id=f"r{i}", url=f"https://www.instagram.com/reel/CODE{i}/", account=f"acc{i}", plays=1000 * (10 - i), niche="t") for i in range(10)], NOW)
+
+    def test_comments_land_on_the_right_reel_and_creator_replies_are_dropped(self):
+        asked = {}
+
+        def fetcher(urls, cfg, token, per_post, run_cap_usd=None):
+            asked["urls"] = urls
+            return [{"text": "love this so much", "owner": "fan", "post": "https://www.instagram.com/reel/CODE1/"},
+                    {"text": "thanks everyone!", "owner": "acc1", "post": "https://www.instagram.com/reel/CODE1/"},
+                    {"text": "where do I buy it", "owner": "fan2", "post": ""}], {"usage_usd": 0.01}
+        from scouts import research
+        res = research.fetch_comments(self.v, "t", {}, "tok", fetcher, now=NOW, price=2.7)
+        self.assertEqual(len(asked["urls"]), 8)
+        self.assertEqual(asked["urls"][0], "https://www.instagram.com/reel/CODE0/")      # most-played first
+        self.assertEqual(res["comments"], 2)
+        self.assertEqual(self.v.get_reel("r1").extras["comments"], ["love this so much"])
+        self.assertEqual(self.v.get_reel("r0").extras["comments"], ["where do I buy it"])      # unmatched: kept as audience talk
+        self.assertAlmostEqual(self.v.month_spend(NOW), 0.01)
+
+    def test_skipped_when_credit_is_short_and_failure_is_not_fatal(self):
+        from scouts import research
+        self.v.record_run("x", 4.9, 1, "", NOW)
+        msgs = []
+        res = research.fetch_comments(self.v, "t", {}, "tok", lambda *a, **k: self.fail("must not be called"), msgs.append, NOW, 2.7)
+        self.assertEqual(res["comments"], 0)
+        self.assertTrue(any("Not enough free credit" in m for m in msgs))
+        self.v.db.execute("DELETE FROM runs")
+        msgs.clear()
+
+        def boom(*a, **k):
+            raise RuntimeError("blocked")
+        self.assertEqual(research.fetch_comments(self.v, "t", {}, "tok", boom, msgs.append, NOW, 2.7)["comments"], 0)
+        self.assertTrue(any("blocked" in m for m in msgs))
+
+
 class Flow(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
@@ -160,6 +203,34 @@ class Flow(unittest.TestCase):
         self.assertIn(b"bioscriptz.js", page)
         self.assertIn("default-src 'self'", headers["Content-Security-Policy"])
         self.assertIn(b"Outlier", self.call("/classic")[1])
+
+    def test_reuse_fetches_comments_only_when_confirmed(self):
+        seen = []
+
+        class Live(web.App):
+            def apify_cfg(self):
+                return {"actor_id": "a", "price_per_1000_results_usd": 2.7, "input_verified": True}
+        import os
+        os.environ["APIFY_TOKEN"] = "t"
+        self.addCleanup(os.environ.pop, "APIFY_TOKEN", None)
+        from scouts.common import Reel
+        app = Live(self.dir / "live.db", False, llm=FakeLLM(), now=NOW)
+        app.harvester = lambda *a, **k: ([Reel(id=f"k{i}", url=f"https://www.instagram.com/reel/C{i}/", account=f"a{i}", plays=5000 + i, followers=900, keyword="x", posted_at=NOW) for i in range(12)], {"usage_usd": 0.1})
+        app.commenter = lambda urls, cfg, token, per_post, run_cap_usd=None: (seen.append(urls) or [{"text": "where can I buy this", "owner": "fan", "post": urls[0]}], {"usage_usd": 0.02})
+        body = {"brand": "B", "category": "c", "days": 30}
+        job = app.wb_start(body, True, False)
+        for _ in range(100):
+            if app.jobs[job]["status"] != "running":
+                break
+            time.sleep(0.1)
+        self.assertEqual(app.jobs[job]["error"], "")
+        self.assertEqual(len(seen), 1)                                       # a fresh run fetched comments
+        job = app.wb_start(body, False, True)                                # re-use without confirming: no comment call
+        for _ in range(100):
+            if app.jobs[job]["status"] != "running":
+                break
+            time.sleep(0.1)
+        self.assertEqual(len(seen), 1)
 
     def test_rejects_bad_workbook_input(self):
         self.assertEqual(self.call("/api/wb/start", {"brand": "", "category": "x"})[0], 400)

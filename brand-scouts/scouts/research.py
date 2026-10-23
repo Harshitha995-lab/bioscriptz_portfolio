@@ -473,6 +473,55 @@ def decode_top(vault, topic: str, llm: LLM, vocab: dict, *, days: int = 7, top: 
             "undated": sum(1 for o in chosen if o.reel.posted_at is None)}
 
 
+COMMENT_REELS = 8
+COMMENTS_PER_REEL = 25
+
+
+def comments_cost(price: float | None) -> float:
+    p = budget.ASSUMED_PRICE_PER_1000 if price is None else float(price)
+    return round(COMMENT_REELS * COMMENTS_PER_REEL / 1000 * p, 4)
+
+
+def _shortcode(url: str) -> str:
+    m = re.search(r"instagram\.com/(?:[\w.]+/)?(?:reel|reels|p|tv)/([\w-]+)", url or "")
+    return m.group(1) if m else ""
+
+
+def fetch_comments(vault, topic: str, apify_cfg: dict, token: str, fetcher, progress=lambda m: None, now=None, price: float | None = None) -> dict:
+    """Comments under the topic's most-played Reels, saved on each Reel for the audience sheets. Skipped (with a message) if credit is short."""
+    now = now or utcnow()
+    reels = sorted((r for r in vault.reels(topic) if _shortcode(r.url) and not (r.extras or {}).get("comments")), key=lambda r: -r.plays)[:COMMENT_REELS]
+    if not reels:
+        return {"comments": 0, "cost": 0.0}
+    est = comments_cost(price)
+    left = max(budget.FREE_CREDIT_USD - vault.month_spend(now), 0.0)
+    if est > max(left - budget.RESERVE_USD, 0.0):
+        progress("Not enough free credit left to fetch comments; the audience sheets will be empty.")
+        return {"comments": 0, "cost": 0.0}
+    progress(f"Fetching comments under the {len(reels)} most-played Reels…")
+    try:
+        got, info = fetcher([r.url for r in reels], apify_cfg, token, per_post=COMMENTS_PER_REEL, run_cap_usd=budget.per_run_cap(left, 1))
+    except Exception as exc:
+        progress(f"Comments could not be fetched ({type(exc).__name__}: {exc}). The audience sheets will be empty.")
+        return {"comments": 0, "cost": 0.0}
+    cost = info.get("usage_usd") if info.get("usage_usd") is not None else len(got) / 1000 * (budget.ASSUMED_PRICE_PER_1000 if price is None else price)
+    vault.record_run("topic-comments", cost, len(got), f"{topic}; " + ("reported by Apify" if info.get("usage_usd") is not None else "ESTIMATED"), now)
+    by_code = {_shortcode(r.url): r for r in reels}
+    kept = 0
+    for c in got:
+        target = next((r for code, r in by_code.items() if code and code in c.get("post", "")), None) or reels[0]    # unmatched comments still count as audience talk
+        if c.get("owner") and c["owner"] == target.account.lower():
+            continue                                    # the creator answering their own comments is not the audience
+        ex = dict(target.extras or {})
+        ex["comments"] = (ex.get("comments") or []) + [c["text"]]
+        target.extras = ex
+        kept += 1
+    for r in reels:
+        r.extras["comments"] = (r.extras.get("comments") or [])[:40]
+    vault.upsert_reels([r for r in reels if (r.extras or {}).get("comments")], now)
+    return {"comments": kept, "cost": round(cost, 4)}
+
+
 def harvest_topic(vault, topic: str, plan: RunPlan, apify_cfg: dict, token: str, harvester, progress=lambda m: None, now=None,
                   priority_creators: list[str] | None = None) -> dict:
     """Stage 1: keyword search. Stage 2: the best hits' creators' own recent Reels, so each has a 'usual'. Spend is recorded per stage."""

@@ -368,3 +368,39 @@ def harvest_profile_details(handles: list[str], cfg: dict, token: str, run_cap_u
         usage = None
     profiles = [dict(i) for i in client.dataset(dataset_id).iterate_items() if isinstance(i, dict) and i.get("username")]
     return profiles, {"items": len(profiles), "usage_usd": usage}
+
+
+def harvest_comments(urls: list[str], cfg: dict, token: str, per_post: int = 25, run_cap_usd: float | None = None) -> tuple[list[dict], dict]:
+    """Comments under specific posts (the hashtag Reel search returns none). One run for all URLs; each comment is one charge.
+    Returns [{"text", "owner", "post"}], where post is whatever the actor says the comment belongs to (used to match it to a Reel)."""
+    urls = [u for u in urls if u]
+    if not urls:
+        return [], {"items": 0, "usage_usd": None}
+    actor = cfg.get("profile_actor_id") or cfg.get("actor_id", "REPLACE_ME")
+    if actor == "REPLACE_ME":
+        raise RuntimeError("Set actor_id in config/apify.json before a live run.")
+    from apify_client import ApifyClient
+
+    client = ApifyClient(token)
+    run = _call(client.actor(actor), {"directUrls": urls, "resultsType": "comments", "resultsLimit": per_post, "addParentData": False}, run_cap_usd)
+    if not run:
+        raise RuntimeError(f"Apify run for {actor} returned nothing; check the run in the Apify console.")
+    dataset_id = run_field(run, "defaultDatasetId", "default_dataset_id")
+    if not dataset_id:
+        raise RuntimeError(f"Apify run for {actor} gave no dataset id; check the run in the Apify console.")
+    usage = run_field(run, "usageTotalUsd", "usage_total_usd")
+    try:
+        usage = float(usage) if usage is not None else None
+    except (TypeError, ValueError):
+        usage = None
+    out = []
+    for item in client.dataset(dataset_id).iterate_items():
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+        owner = item.get("ownerUsername") or (item.get("owner") or {}).get("username") if isinstance(item.get("owner"), dict) else item.get("ownerUsername")
+        post = str(item.get("postUrl") or item.get("inputUrl") or item.get("parentUrl") or item.get("url") or "")
+        out.append({"text": text[:300], "owner": str(owner or "").lower(), "post": post})
+    return out, {"items": len(out), "usage_usd": usage}
