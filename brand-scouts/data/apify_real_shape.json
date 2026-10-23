@@ -1,0 +1,40 @@
+[
+ {
+  "inputUrl": "https://www.instagram.com/explore/tags/personalbrand/",
+  "id": "4006578181091738384",
+  "type": "Video",
+  "shortCode": "DeaOaDAzcMQ",
+  "caption": "Komen \u201cSEMANTIC\u201d biar kak Ochy ajarkan teman-teman... #personalbrand",
+  "url": "https://www.instagram.com/p/DeaOaDAzcMQ/",
+  "commentsCount": 110,
+  "likesCount": 497,
+  "videoUrl": "https://example.invalid/v1.mp4",
+  "videoPlayCount": 8400,
+  "igPlayCount": 8400,
+  "timestamp": "2026-10-12T21:47:17.000Z",
+  "ownerFullName": "Ochy",
+  "ownerUsername": "oohochy",
+  "productType": "clips",
+  "videoDuration": 90.16600036621094,
+  "sharesCount": 139
+ },
+ {
+  "inputUrl": "https://www.instagram.com/explore/tags/personalbrand/",
+  "id": "4004260138602144119",
+  "type": "Video",
+  "shortCode": "DeR_WFtoyF3",
+  "caption": "Business as usual. Just with a better soundtrack. #personalbrand",
+  "url": "https://www.instagram.com/p/DeR_WFtoyF3/",
+  "commentsCount": 10,
+  "likesCount": 583,
+  "videoUrl": "https://example.invalid/v2.mp4",
+  "videoPlayCount": 35168,
+  "igPlayCount": 35168,
+  "timestamp": "2026-10-09T16:59:38.000Z",
+  "ownerFullName": "Corporate Headshot Photographer NYC",
+  "ownerUsername": "ceoportrait",
+  "productType": "clips",
+  "videoDuration": 12.83899974822998,
+  "sharesCount": 314
+ }
+]

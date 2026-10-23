@@ -1,0 +1,19 @@
+{
+  "niches": [
+    {
+      "name": "Personal branding",
+      "keywords": ["#personalbranding", "#personalbrand", "#founderbrand", "personal branding for founders", "founder led content", "personal brand strategy", "linkedin personal branding", "build in public", "storytelling for founders"],
+      "creators": []
+    },
+    {
+      "name": "Ghostwriting",
+      "keywords": ["#ghostwriting", "#linkedinghostwriter", "linkedin ghostwriter", "ghostwriting for founders", "ghostwriting agency", "content ghostwriting", "ghostwriter tips"],
+      "creators": []
+    },
+    {
+      "name": "AI automation",
+      "keywords": ["#aiautomation", "#aiagents", "ai automation for business", "ai agents for business", "n8n automation", "automate with ai", "ai workflow automation", "ai automation agency"],
+      "creators": []
+    }
+  ]
+}

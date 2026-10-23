@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outlier Research</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>Outlier Research</h1>
+  <p class="sub">Type any topic. Get the top outlier Reels of the last few days, decoded: hook, angle, creator, pace, CTA, link.</p>
+  <div id="banner" hidden></div>
+</header>
+<main>
+  <form id="form" autocomplete="off">
+    <div class="modes" role="tablist">
+      <label><input type="radio" name="mode" value="creators" checked> Creators (recommended)</label>
+      <label><input type="radio" name="mode" value="topic"> Topic hashtags</label>
+      <label><input type="radio" name="mode" value="brand"> Brand</label>
+    </div>
+    <div id="brandFields" hidden>
+      <div class="row">
+        <input id="brand" maxlength="40" placeholder="Brand name, e.g. Minimalist">
+        <input id="category" maxlength="40" placeholder="Category, e.g. skincare">
+      </div>
+      <div class="row">
+        <input id="own" maxlength="31" placeholder="Brand's Instagram handle (optional)">
+        <input id="competitors" maxlength="100" placeholder="Up to 3 competitor handles, comma separated (optional)">
+      </div>
+      <p class="small">The category tells the app which meaning you want: "Minimalist" the skincare brand, not minimalism.</p>
+    </div>
+    <label for="topic" id="topicLabel">Topic</label>
+    <div class="row">
+      <input id="topic" maxlength="60" placeholder="e.g. personal branding, daily cosmetics" required>
+      <select id="days" aria-label="Time window">
+        <option value="7">Last 7 days</option>
+        <option value="14">Last 14 days</option>
+        <option value="30">Last 30 days</option>
+      </select>
+      <button id="go" type="submit">Find creators</button>
+    </div>
+    <div id="seedBox">
+      <label for="seeds">Creators you already know are winning in this topic (optional)</label>
+      <textarea id="seeds" rows="3" maxlength="900" placeholder="@handle1, @handle2 … up to 30. They are always included, whatever their size."></textarea>
+    </div>
+    <div id="recent" class="chips"></div>
+  </form>
+  <section id="plan" hidden></section>
+  <section id="progress" hidden></section>
+  <section id="results"></section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

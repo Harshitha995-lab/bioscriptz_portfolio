@@ -1,0 +1,43 @@
+{
+  "_notes": [
+    "Set actor_id to the Apify Instagram Reels scraper you choose, then fit input_template to that actor's input schema (see its Input tab).",
+    "Two candidates seen in a web search, neither tested here: api-empire/instagram-reels-scraper (hashtag and keyword search) and sones/instagram-reels-scraper-lowcost (adds transcripts). Check price and recent reviews first.",
+    "Placeholders {hashtags} and {terms} are filled from config/keywords.txt (lines starting with # are hashtags).",
+    "The real spending guard is the monthly usage limit on your Apify account. Set one before the first live run.",
+    "On the first live run, open out/<week>/raw_sample.json and check the field names; add any that differ under field_map.",
+    "profile_actor_id: an Apify actor that returns recent Reels for given usernames (it can be the same actor if it supports profiles). Used only when config/creators.txt has accounts.",
+    "Placeholder {usernames} in profile_input_template is filled from config/creators.txt.",
+    "per_keyword_runs: true runs the actor once per keyword so every Reel is tagged with the keyword that found it (needed to spread the library across keywords). Set resultsLimit in input_template to the number of Reels you want PER keyword.",
+    "For the transcript and the video hook the actor should return a direct video URL (videoUrl) and, if it can, a transcript; otherwise transcripts are made from the video with ffmpeg + faster-whisper.",
+    "price_per_1000_results_usd: copy the price from the actor's page (Pricing tab) so `agent.py harvest` can estimate cost and stay inside the free plan. If you use two actors, put the higher price.",
+    "apify/instagram-scraper ($2.70 per 1,000 results, seen on its page). Its page warned 'Reduced performance: scraping profile posts is currently limited due to blocking', so creator baselines may come back empty.",
+    "input_verified stays false until input_template / profile_input_template have been checked against this actor's Input > JSON tab and a tiny test run has returned Reels. Live runs refuse while it is false.",
+    "Templates for apify/instagram-scraper follow the field names in its default input (directUrls, resultsType, resultsLimit, addParentData). 'resultsType: reels' and the hashtag-page URL form are from its description and NOT yet confirmed by a test run. {hashtag_urls} and {profile_urls} are filled by the harvester.",
+    "2026-10-20: a 5-item hashtag test run of apify/instagram-scraper (resultsType reels) returned Reels with videoPlayCount, timestamp, ownerUsername, videoUrl, videoDuration, likesCount, commentsCount. It returned NO follower count and NO transcript. input_verified is true for the hashtag (keyword) runs only; profile_verified stays false until a profile test run has been checked, and creator baseline fetches are skipped meanwhile.",
+    "2026-10-20: a 5-item profile test (resultsType reels, directUrls profile) returned Reels with videoPlayCount, timestamp, ownerUsername, videoUrl, videoDuration - but NO follower count, and the items were a MIX of years (2022 to 2026), not just recent ones. So creator 'usual' is computed over a recent window only (agent.outliers.usual_days)."
+  ],
+  "actor_id": "apify/instagram-scraper",
+  "input_template": {
+    "directUrls": [
+      "{hashtag_urls}"
+    ],
+    "resultsType": "reels",
+    "resultsLimit": 30,
+    "addParentData": false
+  },
+  "field_map": {},
+  "profile_actor_id": "apify/instagram-scraper",
+  "profile_input_template": {
+    "directUrls": [
+      "{profile_urls}"
+    ],
+    "resultsType": "reels",
+    "resultsLimit": 12,
+    "addParentData": false
+  },
+  "per_keyword_runs": true,
+  "parallel_runs": 4,
+  "price_per_1000_results_usd": 2.7,
+  "input_verified": true,
+  "profile_verified": true
+}

@@ -1,0 +1,6 @@
+// The 5 content angles. Format: name: what it means. Labelling and angle scoring both use these names.
+story: a personal or client story with a turning point
+contrarian: challenges what most people say about personal branding, including myth-busting
+proof: shows a real result, number or before-and-after
+how-to: a step-by-step framework, template or checklist
+authority: a lens from your own field (for example a biotech mechanism) that others cannot copy
