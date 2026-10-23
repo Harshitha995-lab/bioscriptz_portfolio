@@ -82,7 +82,7 @@ function renderStart() {
   <div class="fld"><label for="f-brand">Brand name</label><input id="f-brand" maxlength="40" placeholder="e.g. Minimalist" value="${esc(f.brand)}"></div>
   <div class="fld"><label for="f-category">Category</label><input id="f-category" maxlength="40" placeholder="e.g. skincare" value="${esc(f.category)}"></div>
   <div class="fld"><label for="f-website">Brand website (optional)</label><input id="f-website" maxlength="200" placeholder="https://…" value="${esc(f.website)}"></div>
-  <div class="fld"><label for="f-days">Look back</label><select id="f-days">${[7, 14, 30].map((d) => `<option value="${d}" ${String(d) === f.days ? "selected" : ""}>Last ${d} days</option>`).join("")}</select></div>
+  <div class="fld"><label for="f-days">Look back</label><select id="f-days">${[7, 14, 30, 90].map((d) => `<option value="${d}" ${String(d) === f.days ? "selected" : ""}>Last ${d} days</option>`).join("")}</select></div>
   <div class="fld"><label for="f-watch">Instagram creators and competitors to watch (optional, up to 30 handles)</label><textarea id="f-watch" maxlength="900" placeholder="@handle1, @handle2 …">${esc(f.watch)}</textarea></div>
   <div class="fld"><label for="f-comp">Competitor websites (optional, one per line, as <b>Name | https://…</b>)</label><textarea id="f-comp" maxlength="900" placeholder="Acme | https://acme.com">${esc(f.competitor_sites)}</textarea></div>
   <div class="row cols"><button class="btn pri" type="submit">Run the strategy</button><span class="muted">You see the cost and confirm before anything is spent.</span></div>
@@ -151,7 +151,8 @@ function renderRun() {
   const wb = S.wb;
   const gateHtml = gate && wb ? `<div class="card gate cols"><div><h3>Your turn: approve the ideas you would shoot</h3><p class="muted mt4">Scripts are only written for approved ideas. ${wb.ideas.length ? "" : "No ideas could be built from this research. " + esc(wb.ideas_note || "")}</p></div>
     <div class="ideas">${wb.ideas.map((x, i) => ideaRow(x, i)).join("")}</div>
-    <div class="row"><button class="btn go" data-act="approve-go" ${S.approved.size ? "" : "disabled"}>Approve ${S.approved.size} and write scripts</button><button class="btn sm" data-act="gate-all">Select all</button><button class="btn sm" data-act="gate-none">Clear</button></div></div>` : "";
+    ${wb.ideas.length ? `<div class="row"><button class="btn go" data-act="approve-go" ${S.approved.size ? "" : "disabled"}>Approve ${S.approved.size} and write scripts</button><button class="btn sm" data-act="gate-all">Select all</button><button class="btn sm" data-act="gate-none">Clear</button></div>`
+      : `<div class="row"><button class="btn go" data-act="retry-wide">Try again with the last 90 days (free, uses the saved Reels)</button><button class="btn" data-act="retry-comments">Same, and fetch comments (about $0.50)</button><button class="btn sm" data-act="nav" data-v="book">Open the workbook anyway</button></div>`}</div>` : "";
   const errHtml = err ? `<div class="card warnbox cols"><b>This run stopped.</b><p class="m0">${esc(j.error)}</p><p class="m0 muted">Nothing is lost: saved Reels can be re-used on the next run at no Apify cost.</p></div>` : "";
   setApp(`<div class="runlay"><div class="steps"><div class="card tint c-violet"><div class="row"><h2 class="h2s">Running for ${esc(S.form.brand || (S.wb && S.wb.brand) || "your brand")}</h2>${chip(S.form.category || "", "pink")}</div>
    <p class="muted mt4">${S.state.sample ? "Sample mode: synthetic data, nothing is spent." : "Live run."}</p></div>${cards}</div>
@@ -360,6 +361,8 @@ document.addEventListener("click", async (e) => {
   else if (a === "confirm-run") startRun(true, false);
   else if (a === "reuse-run") startRun(false, true);
   else if (a === "reuse-comments") startRun(true, true);
+  else if (a === "retry-wide") { S.form.days = "90"; startRun(false, true); }
+  else if (a === "retry-comments") { S.form.days = "90"; startRun(true, true); }
   else if (a === "cancel-plan") $("#planBox").innerHTML = "";
   else if (a === "open-recent") { try { S.wb = await api("/api/wb?id=" + encodeURIComponent(t.dataset.id)); S.approved = new Set(S.wb.approved); S.view = "book"; S.sheet = 0; render(); } catch (err) { toast(err.message); } }
   else if (a === "step") { S.sheet = STEPS[+t.dataset.i].sheets[0]; render(); }

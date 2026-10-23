@@ -256,8 +256,8 @@ class App:
     def wb_params(raw: dict) -> dict:
         brand = research.clean_brand({"brand": raw.get("brand"), "category": raw.get("category"), "own": raw.get("own", ""), "competitors": []})
         days = int(raw.get("days", 30))
-        if days not in (7, 14, 30):
-            raise ValueError("Pick 7, 14 or 30 days.")
+        if days not in (7, 14, 30, 90):
+            raise ValueError("Pick 7, 14, 30 or 90 days.")
         sites = []
         for line in str(raw.get("competitor_sites") or "").splitlines()[:5]:
             line = line.strip()
@@ -363,7 +363,7 @@ class App:
             ideas = workbook.ideation(llm, ctx, out["cards"], av)
             wb = {"id": wb_id, "brand": brand["brand"], "category": brand["category"], "topic": topic, "days": p["days"], "sample": self.sample,
                   "created_at": now.isoformat(), "updated_at": now.isoformat(), "research": out, "sites": sites, "awareness": aw, "avatars": av,
-                  "ideas": ideas["ideas"], "ideas_note": ideas.get("note", ""), "approved": [], "scripts": [], "ctx": ctx,
+                  "ideas": ideas["ideas"], "ideas_note": self._wb_why_no_ideas(ideas, out, p["days"]), "approved": [], "scripts": [], "ctx": ctx,
                   "feed": workbook.build_feed(reels, p["watch"], [c["creator"] for c in out["cards"]]), "watch": p["watch"]}
             self._wb_save(wb)
             job["status"] = "gate"
@@ -373,6 +373,19 @@ class App:
         finally:
             self.running = None
             self.lock.release()
+
+    @staticmethod
+    def _wb_why_no_ideas(ideas: dict, out: dict, days: int) -> str:
+        if ideas["ideas"]:
+            return ideas.get("note", "")
+        st = out.get("stats") or {}
+        failed = sum(1 for c in out.get("cards", []) if c.get("error"))
+        bits = [f"{st.get('considered', 0)} Reels were posted in the last {days} days and {st.get('outliers', 0)} of them were outliers."]
+        if failed:
+            bits.append(f"{failed} outlier Reel(s) could not be decoded (see the AI error on Sheet 4).")
+        if not out.get("cards"):
+            bits.append("Try a longer look-back (90 days).")
+        return " ".join(bits) + " " + ideas.get("note", "")
 
     def wb_approve(self, wb_id: str, approved) -> str:
         wb = self.wb(wb_id)
