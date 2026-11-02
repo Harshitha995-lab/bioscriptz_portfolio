@@ -1,0 +1,115 @@
+{
+  "triage": {
+    "max_age_days": 14,
+    "min_plays": 5000,
+    "keep_top": 300,
+    "spam_terms": [
+      "giveaway",
+      "follow for follow",
+      "f4f",
+      "free iphone",
+      "click link to win"
+    ],
+    "relevance_terms": [
+      "brand",
+      "founder",
+      "linkedin",
+      "content",
+      "audience",
+      "followers",
+      "creator",
+      "storytell",
+      "ghostwrit",
+      "personal",
+      "trust",
+      "viral",
+      "post",
+      "build in public",
+      "thought leader"
+    ],
+    "min_heat": 80,
+    "min_outperformance": 3.0,
+    "min_reels_for_median": 5,
+    "warn_below": 20
+  },
+  "scoring": {
+    "top_n": 10,
+    "weights": {
+      "viral_evidence": 30,
+      "breadth": 20,
+      "momentum": 10,
+      "conversion": 15,
+      "brand_match": 15,
+      "history": 10
+    },
+    "max_topics": 100
+  },
+  "harvest": {
+    "max_reels": 3000
+  },
+  "shortlist": {
+    "expand_top": 10,
+    "topics": 5,
+    "angles_per_topic": 3,
+    "experiment_slots": 1
+  },
+  "viral_analysis": {
+    "enabled": true,
+    "viral_per_topic": 6,
+    "peers_per_topic": 6,
+    "peer_pool_max": 400,
+    "max_reels": 120,
+    "frames": true,
+    "min_group": 3,
+    "min_gap": 0.25
+  },
+  "viral_library": {
+    "enabled": true,
+    "n": 100,
+    "per_keyword_cap": 5,
+    "per_account_cap": 2,
+    "transcribe_missing": true,
+    "max_transcriptions": 150,
+    "twin_search": true,
+    "twin_min_ratio": 10,
+    "twin_min_baseline_plays": 1000,
+    "followup_per_account": 15,
+    "min_pairs_for_pattern": 3
+  },
+  "watchlist": {
+    "outlier_k": 3.0,
+    "max_age_days": 30,
+    "min_reels": 5
+  },
+  "scripts": {
+    "enabled": true,
+    "count": 5,
+    "target_seconds": 30,
+    "words_per_second": 2.6,
+    "audio_hook_max_words": 14,
+    "text_hook_max_words": 8,
+    "max_shared_words": 6,
+    "max_rounds": 3,
+    "max_per_framework": 2
+  },
+  "agent": {
+    "outliers": {
+      "days": 30,
+      "k_usual": 3.0,
+      "k_followers": 5.0,
+      "min_plays": 1000,
+      "min_reels_for_usual": 5,
+      "usual_days": 180
+    },
+    "analyse": {
+      "top": 20,
+      "normals_per_creator": 3,
+      "min_group": 3,
+      "min_gap": 0.25
+    }
+  },
+  "models": {
+    "analysis": "claude-sonnet-5-5",
+    "scripts": "claude-sonnet-5-5"
+  }
+}

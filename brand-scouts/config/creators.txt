@@ -1,0 +1,4 @@
+// Instagram handles of the creators to track, one per line, no @.
+// Only list creators who actually post Reels on Instagram. Many LinkedIn-first creators do not.
+// Handles are not filled in because I have not verified any; add the ones you have checked.
+// Leave this file with no handles to run on keywords only.
