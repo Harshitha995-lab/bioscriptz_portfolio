@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Render a motion-graphics HTML file (one that defines window.seek(seconds)) to an MP4.
 // Usage: node tools/render-video.js <file.html> <out.mp4> [--w 1080 --h 1920 --fps 30 --dur 60]
-// Output is upload-safe: H.264 high, yuv420p, bt709, +faststart, with a silent AAC track.
+// Output is upload-safe and plays on phones: H.264 High@4.0, capped bitrate, yuv420p, bt709,
+// +faststart, with a silent AAC track.
 const { chromium } = require('playwright');
 const { execFileSync } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
@@ -29,7 +30,7 @@ for (let i = 0; i < rest.length; i += 2) opt[rest[i].replace(/^--/, '')] = +rest
   await browser.close();
   execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-framerate', String(opt.fps), '-i', path.join(dir, '%05d.jpg'),
     '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-shortest',
-    '-c:v', 'libx264', '-profile:v', 'high', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p',
+    '-c:v', 'libx264', '-profile:v', 'high', '-level:v', '4.0', '-preset', 'slow', '-crf', '20', '-maxrate', '2500k', '-bufsize', '5000k', '-pix_fmt', 'yuv420p',
     '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', '-color_range', 'tv',
     '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', out], { stdio: 'inherit' });
   fs.rmSync(dir, { recursive: true, force: true });
