@@ -1,0 +1,6 @@
+.venv/
+*_words.json
+*_captions.ass
+*_captioned.mp4
+*.mp4
+*.mov
