@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SaaS launch video template (60s)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* ===== Edit these to brand the video for any SaaS product ===== */
+:root{
+  --bg:#0c1014;          /* background */
+  --ink:#eef2f5;         /* main text */
+  --muted:#8b98a5;       /* secondary text */
+  --accent:#3ddc97;      /* the one accent colour */
+  --panel:rgba(255,255,255,.06);
+  --panel-line:rgba(255,255,255,.12);
+  --font:"Inter Display","Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+html,body{margin:0;height:100%;background:#000;overflow:hidden}
+#fit{position:fixed;inset:0;display:grid;place-items:center}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--bg);font-family:var(--font);color:var(--ink);transform-origin:center}
+#stage *{box-sizing:border-box}
+.abs{position:absolute}
+.vignette{inset:0;background:radial-gradient(ellipse 70% 60% at 50% 45%,rgba(255,255,255,.05),transparent 70%)}
+.h{font-weight:700;letter-spacing:-.025em;line-height:1.02;white-space:nowrap}
+.cap{left:120px;bottom:96px;font-size:56px;font-weight:600;letter-spacing:-.02em}
+.cap em{font-style:normal;color:var(--accent)}
+.tile{width:120px;height:120px;border-radius:30px;background:var(--panel);border:1px solid var(--panel-line);display:grid;place-items:center;backdrop-filter:blur(10px)}
+.tile i{display:block;border-radius:8px}
+.glass{background:rgba(22,28,34,.72);border:1px solid var(--panel-line);border-radius:28px;box-shadow:0 40px 120px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08);backdrop-filter:blur(24px)}
+.row{display:flex;align-items:center;gap:16px}
+.pill{height:14px;border-radius:7px;background:rgba(255,255,255,.14)}
+.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:24px}
+.label{font-size:20px;color:var(--muted);font-weight:500}
+.dot{width:14px;height:14px;border-radius:50%}
+.check{width:44px;height:44px;border-radius:50%;border:2px solid var(--accent);display:grid;place-items:center;flex:none}
+.node{width:132px;height:132px;border-radius:50%;border:2px solid var(--panel-line);background:rgba(22,28,34,.9);display:grid;place-items:center;font-family:var(--mono);font-size:40px;font-weight:600}
+</style>
+</head>
+<body>
+<div id="fit"><div id="stage"></div></div>
+<script>
+/* ===== Words: change these for your product. Nothing else needs editing. ===== */
+const CONFIG = {
+  product: "YourApp",
+  hook: ["Your work is", "everywhere."],
+  gather: ["All of it,", "in one place."],
+  seeCap: ["See", "everything", "at a glance."],
+  prompt: "Summarise this week and flag what needs me",
+  results: ["Deals ready to close", "Tasks waiting on you", "Monday report drafted"],
+  askCap: ["Ask in", "plain words."],
+  checks: ["Synced across your tools", "Shared with your team", "Ready before you are"],
+  checkCap: ["Handled", "for you."],
+  steps: [["Connect","Plug in the tools you use"],["Automate","Set it once, let it run"],["Grow","Spend time on what matters"]],
+  punch: ["Less switching.", "More shipping."],
+  tagline: "All your work, in one place.",
+  cta: "Start free at yourapp.com"
+};
+const DURATION = 60;
+
+/* ===== Helpers ===== */
+const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const p=(t,a,b)=>clamp((t-a)/(b-a));
+const eo=x=>1-Math.pow(1-x,3);            // ease out cubic
+const eio=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const lerp=(a,b,x)=>a+(b-a)*x;
+// visible between a and b with fade in/out of f seconds
+const win=(t,a,b,f=.5)=>Math.min(eo(p(t,a,a+f)),1-eo(p(t,b-f,b)));
+const S=document.getElementById("stage");
+const el=(html,style="")=>{const d=document.createElement("div");d.className="abs";d.style.cssText=style;d.innerHTML=html;S.appendChild(d);return d};
+const set=(e,o,tx=0,ty=0,s=1)=>{e.style.opacity=o;e.style.transform=`translate(${tx}px,${ty}px) scale(${s})`;e.style.visibility=o<=0.001?"hidden":"visible"};
+const A="var(--accent)";
+
+el("","inset:0").className="abs vignette";
+
+/* Beat 1-2: scattered app tiles */
+const tileColors=["#5b8def","#f2a65a","#e5677d","#a78bfa","#3ddc97","#f4d35e","#56c2e6","#ef8f6b"];
+const tilePos=[[260,170],[1500,140],[180,700],[1620,690],[560,860],[1240,880],[700,120],[1180,160]];
+const tiles=tilePos.map((pos,i)=>{
+  const shape=i%3===0?"width:46px;height:46px;border-radius:50%":i%3===1?"width:52px;height:36px":"width:20px;height:54px";
+  return {e:el(`<div class="tile"><i style="${shape};background:${tileColors[i]}"></i></div>`,`left:${pos[0]}px;top:${pos[1]}px`),x:pos[0],y:pos[1],i};
+});
+const hook=CONFIG.hook.map((w,i)=>el(`<div class="h" style="font-size:150px">${w}</div>`,`left:0;right:0;text-align:center;top:${330+i*170}px`));
+const gather=CONFIG.gather.map((w,i)=>el(`<div class="h" style="font-size:150px">${i?`<span style="color:var(--accent)">${w}</span>`:w}</div>`,`left:0;right:0;text-align:center;top:${330+i*170}px`));
+
+/* Beat 3: product window */
+const W=1500,H=840;
+const sidebarIcons=tileColors.slice(0,6).map((c,i)=>`<div class="row" style="gap:14px"><div style="width:30px;height:30px;border-radius:9px;background:${c};opacity:.9"></div><div class="pill" style="width:${[110,90,120,80,100,70][i]}px"></div></div>`).join("");
+const chartPath="M0,250 C80,240 120,200 200,205 C280,210 320,150 400,140 C480,130 520,170 600,120 C680,70 720,90 800,60 C860,40 900,30 960,20";
+const win3=el(`
+<div class="glass" style="width:${W}px;height:${H}px;position:relative;overflow:hidden">
+  <div class="row" style="position:absolute;left:0;right:0;top:0;height:76px;padding:0 28px;border-bottom:1px solid rgba(255,255,255,.08)">
+    <div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div>
+    <div style="margin-left:24px;font-weight:700;font-size:24px;letter-spacing:-.01em">${CONFIG.product}</div>
+    <div id="search" style="margin-left:auto;width:420px;height:44px;border-radius:22px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)"></div>
+  </div>
+  <div style="position:absolute;left:0;top:76px;bottom:0;width:250px;padding:32px 28px;display:flex;flex-direction:column;gap:26px;border-right:1px solid rgba(255,255,255,.06)">${sidebarIcons}</div>
+  <div style="position:absolute;left:290px;right:40px;top:116px;display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
+    ${["Pipeline","Tasks","Revenue"].map((n,i)=>`<div class="card kpi" style="height:170px"><div class="label">${n}</div>
+      <svg width="300" height="80" viewBox="0 0 300 80" style="margin-top:22px;overflow:visible"><path class="spark" d="${["M0,60 L50,52 L100,58 L150,40 L200,44 L250,22 L300,14","M0,30 L50,40 L100,28 L150,46 L200,36 L250,50 L300,42","M0,70 L50,64 L100,50 L150,54 L200,34 L250,30 L300,8"][i]}" fill="none" stroke="${i===1?"#8b98a5":"var(--accent)"}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`).join("")}
+  </div>
+  <div class="card" style="position:absolute;left:290px;top:316px;width:690px;height:484px">
+    <div class="label">This week</div>
+    <svg width="640" height="360" viewBox="0 0 960 290" preserveAspectRatio="none" style="margin-top:24px;overflow:visible">
+      ${[60,130,200,270].map(y=>`<line x1="0" x2="960" y1="${y}" y2="${y}" stroke="rgba(255,255,255,.06)" stroke-width="2"/>`).join("")}
+      <path id="area" d="${chartPath} L960,290 L0,290 Z" fill="var(--accent)" opacity="0"/>
+      <path id="line" d="${chartPath}" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div class="card" style="position:absolute;left:1004px;top:316px;right:40px;height:484px;display:flex;flex-direction:column;gap:22px">
+    <div class="label">Up next</div>
+    ${[0,1,2,3,4].map(i=>`<div class="row task" style="gap:16px"><div style="width:26px;height:26px;border-radius:8px;border:2px solid ${i<2?"var(--accent)":"rgba(255,255,255,.25)"};background:${i<2?"var(--accent)":"transparent"}"></div><div class="pill" style="width:${[260,200,280,170,230][i]}px"></div></div>`).join("")}
+  </div>
+</div>`,`left:${(1920-W)/2}px;top:${(1080-H)/2-40}px;transform-origin:center`);
+const kpis=[...win3.querySelectorAll(".kpi")], sparks=[...win3.querySelectorAll(".spark")], tasks=[...win3.querySelectorAll(".task")];
+const line=win3.querySelector("#line"), area=win3.querySelector("#area");
+const lineLen=line.getTotalLength(); line.style.strokeDasharray=lineLen;
+sparks.forEach(s=>{s._len=s.getTotalLength();s.style.strokeDasharray=s._len});
+const seeCap=el(`<div class="cap" style="position:static">${CONFIG.seeCap.map((w,i)=>`<span class="w" style="display:inline-block;margin-right:16px">${i===1?`<em>${w}</em>`:w}</span>`).join("")}</div>`,"left:120px;bottom:70px");
+const seeWords=[...seeCap.querySelectorAll(".w")];
+
+/* Beat 4: command box */
+const cmd=el(`
+<div class="glass" style="width:1160px;padding:36px 40px">
+  <div class="row" style="height:84px;padding:0 28px;border-radius:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)">
+    <div style="width:28px;height:28px;border-radius:50%;border:3px solid var(--accent);flex:none"></div>
+    <div style="font-size:34px;font-weight:500"><span id="typed"></span><span id="caret" style="display:inline-block;width:3px;height:38px;background:var(--ink);vertical-align:-6px;margin-left:3px"></span></div>
+  </div>
+  <div id="results" style="display:flex;flex-direction:column;gap:18px;margin-top:28px">
+    ${CONFIG.results.map((r,i)=>`<div class="row res" style="padding:22px 26px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)"><div class="dot" style="background:${[A,"#f4d35e","#56c2e6"][i]}"></div><div style="font-size:32px;font-weight:500">${r}</div><div class="pill" style="margin-left:auto;width:${[160,120,140][i]}px"></div></div>`).join("")}
+  </div>
+</div>`,`left:${(1920-1160)/2}px;top:200px`);
+const typed=cmd.querySelector("#typed"), caret=cmd.querySelector("#caret"), results=[...cmd.querySelectorAll(".res")];
+const askCap=el(`<div class="cap" style="position:static">${CONFIG.askCap[0]} <em>${CONFIG.askCap[1]}</em></div>`,"left:120px;bottom:70px");
+
+/* Beat 5: checks */
+const checkSvg=`<svg width="24" height="24" viewBox="0 0 24 24"><path class="tick" d="M4 12.5 L10 18 L20 6" fill="none" stroke="var(--accent)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const checks=el(`<div style="display:flex;justify-content:center"><div style="display:flex;flex-direction:column;gap:30px">${CONFIG.checks.map(c=>`<div class="row chk" style="gap:28px"><div class="check">${checkSvg}</div><div style="font-size:60px;font-weight:600;letter-spacing:-.02em">${c}</div></div>`).join("")}</div></div>`,"left:0;right:0;top:330px");
+const chkRows=[...checks.querySelectorAll(".chk")], ticks=[...checks.querySelectorAll(".tick")];
+ticks.forEach(k=>{k._len=k.getTotalLength();k.style.strokeDasharray=k._len});
+const checkCap=el(`<div class="cap" style="position:static">${CONFIG.checkCap[0]} <em>${CONFIG.checkCap[1]}</em></div>`,"left:120px;bottom:70px");
+
+/* Beat 6: steps */
+const stepsHead=el(`<div class="h" style="font-size:44px;color:var(--muted);font-weight:600;letter-spacing:.02em">How it works</div>`,"left:0;right:0;text-align:center;top:190px");
+const stepX=[460,960,1460];
+const track=el(`<svg width="1000" height="8"><line id="trk" x1="0" y1="4" x2="1000" y2="4" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/></svg>`,"left:460px;top:458px");
+const trk=track.querySelector("#trk"); trk.style.strokeDasharray=1000;
+const steps=CONFIG.steps.map((s,i)=>el(`<div style="display:flex;flex-direction:column;align-items:center;gap:30px;width:420px"><div class="node">${i+1}</div><div class="h" style="font-size:58px">${s[0]}</div><div style="font-size:28px;color:var(--muted);font-weight:500">${s[1]}</div></div>`,`left:${stepX[i]-210}px;top:396px`));
+const nodes=steps.map(s=>s.querySelector(".node"));
+
+/* Beat 7: punch */
+const punch=CONFIG.punch.map((w,i)=>el(`<div class="h" style="font-size:170px"><span>${w}</span></div>`,`left:0;right:0;text-align:center;top:${300+i*200}px`));
+const underline=el(`<div style="height:12px;border-radius:6px;background:var(--accent);transform-origin:left"></div>`,"left:0;top:0;width:0");
+
+/* Beat 8: end card */
+const logo=el(`<div style="width:150px;height:150px;border-radius:40px;background:var(--accent);display:grid;place-items:center"><div style="width:62px;height:62px;border-radius:50%;border:12px solid var(--bg)"></div></div>`,"left:885px;top:230px");
+const name=el(`<div class="h" style="font-size:132px">${CONFIG.product}</div>`,"left:0;right:0;text-align:center;top:420px");
+const tag=el(`<div style="font-size:44px;color:var(--muted);font-weight:500">${CONFIG.tagline}</div>`,"left:0;right:0;text-align:center;top:590px");
+const cta=el(`<div style="display:inline-block;padding:30px 56px;border-radius:999px;background:var(--ink);color:var(--bg);font-size:42px;font-weight:700;letter-spacing:-.01em">${CONFIG.cta}</div>`,"left:0;right:0;text-align:center;top:700px");
+
+/* ===== One function draws any moment ===== */
+function render(t){
+  t=((t%DURATION)+DURATION)%DURATION;
+  // Beat 1+2: tiles drift (0-5), converge (5-8.5)
+  const conv=eio(p(t,5,8.5));
+  tiles.forEach(o=>{
+    const dx=Math.sin(t*.6+o.i)*14, dy=Math.cos(t*.5+o.i*1.7)*14;
+    const intro=eo(p(t,.1+o.i*.08,.9+o.i*.08));
+    const dockX=960-4*150+o.i*150+15-60, dockY=800;
+    const tx=lerp(dx,dockX-o.x,conv), ty=lerp(dy+(1-intro)*30,dockY-o.y,conv);
+    set(o.e,intro*(1-p(t,8.4,9.2)),tx,ty,lerp(1,.8,conv));
+  });
+  hook.forEach((e,i)=>{const a=.3+i*.9;set(e,win(t,a,5.2,.6),0,(1-eo(p(t,a,a+.7)))*40)});
+  gather.forEach((e,i)=>{const a=5.2+i*1.1;set(e,win(t,a,9.6,.6),0,(1-eo(p(t,a,a+.7)))*40)});
+
+  // Beat 3: window 8.6-20 (push in), then pushes back for beat 4
+  const wIn=eo(p(t,8.8,10.2));
+  const wOut=eo(p(t,19.4,20.4));
+  const push=lerp(1,1.06,eio(p(t,10,19.5)));
+  set(win3,wIn*(1-wOut*.85),0,lerp(60,0,wIn)+wOut*-30,lerp(.9,push,wIn)*(1-wOut*.06));
+  win3.style.filter=wOut>0?`blur(${wOut*8}px)`:"none";
+  if(t>21) {win3.style.opacity=lerp(.15,0,eo(p(t,29.5,30.3)));}
+  kpis.forEach((k,i)=>{const a=10.4+i*.3;set(k,eo(p(t,a,a+.6)),0,(1-eo(p(t,a,a+.6)))*20)});
+  sparks.forEach((s,i)=>{s.style.strokeDashoffset=s._len*(1-eio(p(t,11+i*.3,12.6+i*.3)))});
+  line.style.strokeDashoffset=lineLen*(1-eio(p(t,12,15.5)));
+  area.setAttribute("opacity",.14*eo(p(t,14.5,16)));
+  tasks.forEach((k,i)=>{const a=14.6+i*.35;set(k,eo(p(t,a,a+.5)),(1-eo(p(t,a,a+.5)))*24,0)});
+  seeWords.forEach((w,i)=>{const a=11+i*.6;set(w,win(t,a,19.6,.5),0,(1-eo(p(t,a,a+.5)))*24)});
+
+  // Beat 4: command 20-30
+  set(cmd,win(t,20.4,29.8,.6),0,(1-eo(p(t,20.4,21.2)))*40,1);
+  const n=Math.floor(CONFIG.prompt.length*p(t,21.2,25.2));
+  typed.textContent=CONFIG.prompt.slice(0,n);
+  caret.style.opacity=(t<25.8)?((Math.floor(t*2.2)%2===0||(t>21.2&&t<25.2))?1:0):0;
+  results.forEach((r,i)=>{const a=26+i*.45;set(r,eo(p(t,a,a+.5)),0,(1-eo(p(t,a,a+.5)))*24)});
+  set(askCap,win(t,21,29.6,.5),0,(1-eo(p(t,21,21.5)))*24);
+
+  // Beat 5: checks 30-36
+  chkRows.forEach((r,i)=>{const a=30.4+i*1.2;set(r,win(t,a,35.8,.5),(1-eo(p(t,a,a+.6)))*40,0)});
+  ticks.forEach((k,i)=>{const a=30.9+i*1.2;k.style.strokeDashoffset=k._len*(1-eo(p(t,a,a+.5)))});
+  set(checkCap,win(t,31,35.8,.5),0,(1-eo(p(t,31,31.5)))*24);
+
+  // Beat 6: steps 36-46
+  set(stepsHead,win(t,36.2,45.8,.5),0,(1-eo(p(t,36.2,36.8)))*20);
+  set(track,win(t,36.6,45.8,.4));
+  trk.style.strokeDashoffset=1000*(1-eio(p(t,38,43.2)));
+  steps.forEach((s,i)=>{const a=37+i*2.6;set(s,win(t,a,45.8,.6),0,(1-eo(p(t,a,a+.7)))*30)});
+  nodes.forEach((nd,i)=>{const on=p(t,37.4+i*2.6,37.9+i*2.6);nd.style.borderColor=on>0?"var(--accent)":"rgba(255,255,255,.12)";nd.style.color=on>0?"var(--accent)":"var(--ink)"});
+
+  // Beat 7: punch 46-52
+  punch.forEach((e,i)=>{const a=46.2+i*1.6;set(e,win(t,a,51.8,.5),0,(1-eo(p(t,a,a+.6)))*40)});
+  const r2=punch[1].querySelector("span").getBoundingClientRect(), sr=S.getBoundingClientRect(), sc=sr.width/1920;
+  underline.style.left=((r2.left-sr.left)/sc)+"px"; underline.style.top=(300+200+200)+"px"; underline.style.width=(r2.width/sc)+"px";
+  underline.style.transform=`scaleX(${eio(p(t,48.4,49.4))})`; underline.style.opacity=win(t,48.3,51.8,.4);
+
+  // Beat 8: end card 52-60
+  set(logo,eo(p(t,52.2,53)),0,(1-eo(p(t,52.2,53)))*30,lerp(.85,1,eo(p(t,52.2,53))));
+  set(name,eo(p(t,52.7,53.5)),0,(1-eo(p(t,52.7,53.5)))*30);
+  set(tag,eo(p(t,53.3,54.1)),0,(1-eo(p(t,53.3,54.1)))*24);
+  set(cta,eo(p(t,54,54.8)),0,(1-eo(p(t,54,54.8)))*24);
+  // fade the whole end card out in the last half second so the loop is clean
+  const end=1-p(t,59.5,60);
+  [logo,name,tag,cta].forEach(e=>e.style.opacity=parseFloat(e.style.opacity)*end);
+}
+window.seek=s=>{render(s);return s};
+
+const rendering=new URLSearchParams(location.search).has("render");
+function fit(){const s=rendering?1:Math.min(innerWidth/1920,innerHeight/1080);S.style.transform=`scale(${s})`}
+addEventListener("resize",fit); fit();
+if(!rendering){const t0=performance.now();(function loop(){render((performance.now()-t0)/1000);requestAnimationFrame(loop)})()}
+else render(0);
+</script>
+</body>
+</html>
