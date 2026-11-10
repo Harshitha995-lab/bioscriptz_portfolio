@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SaaS launch reel template (60s, 9:16)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* ===== Edit these to brand the reel for any SaaS product ===== */
+:root{
+  --bg:#0c1014; --ink:#eef2f5; --muted:#8b98a5; --accent:#3ddc97;
+  --panel:rgba(255,255,255,.06); --panel-line:rgba(255,255,255,.12);
+  --font:"Inter Display","Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+html,body{margin:0;height:100%;background:#000;overflow:hidden}
+#fit{position:fixed;inset:0;display:grid;place-items:center}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:var(--bg);font-family:var(--font);color:var(--ink);transform-origin:center}
+#stage *{box-sizing:border-box}
+.abs{position:absolute}
+.vignette{inset:0;background:radial-gradient(ellipse 80% 55% at 50% 45%,rgba(255,255,255,.05),transparent 70%)}
+.h{font-weight:700;letter-spacing:-.025em;line-height:1.02;white-space:nowrap}
+.cap{font-size:60px;font-weight:600;letter-spacing:-.02em;text-align:center;line-height:1.1}
+.cap em{font-style:normal;color:var(--accent)}
+.tile{width:120px;height:120px;border-radius:30px;background:var(--panel);border:1px solid var(--panel-line);display:grid;place-items:center}
+.tile i{display:block;border-radius:8px}
+.glass{background:rgba(22,28,34,.78);border:1px solid var(--panel-line);border-radius:36px;box-shadow:0 40px 120px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08)}
+.row{display:flex;align-items:center;gap:16px}
+.pill{height:14px;border-radius:7px;background:rgba(255,255,255,.14)}
+.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:22px;padding:22px}
+.label{font-size:22px;color:var(--muted);font-weight:500}
+.dot{width:16px;height:16px;border-radius:50%;flex:none}
+.check{width:56px;height:56px;border-radius:50%;border:3px solid var(--accent);display:grid;place-items:center;flex:none}
+.node{width:120px;height:120px;border-radius:50%;border:3px solid var(--panel-line);background:rgba(22,28,34,.95);display:grid;place-items:center;font-family:var(--mono);font-size:40px;font-weight:600;flex:none}
+/* Instagram safe zone guide: add ?guides to the URL to see it */
+.guide{left:60px;right:140px;top:250px;bottom:420px;border:3px dashed rgba(255,80,80,.7);pointer-events:none}
+</style>
+</head>
+<body>
+<div id="fit"><div id="stage"></div></div>
+<script>
+/* ===== Words: same CONFIG as the 16:9 version. Change these for your product. ===== */
+const CONFIG = {
+  product: "YourApp",
+  hook: ["Your work", "is everywhere."],
+  gather: ["All of it,", "in one place."],
+  seeCap: ["See", "everything", "at a glance."],
+  prompt: "Summarise this week and flag what needs me",
+  results: ["Deals ready to close", "Tasks waiting on you", "Monday report drafted"],
+  askCap: ["Ask in", "plain words."],
+  checks: ["Synced across your tools", "Shared with your team", "Ready before you are"],
+  checkCap: ["Handled", "for you."],
+  steps: [["Connect","Plug in the tools you use"],["Automate","Set it once, let it run"],["Grow","Spend time on what matters"]],
+  punch: ["Less", "switching.", "More", "shipping."],
+  tagline: "All your work, in one place.",
+  cta: "Start free at yourapp.com"
+};
+const DURATION = 60;
+/* Safe zone for Instagram Reels at 1080 x 1920: keep words between y 250 and y 1500,
+   and away from the right-hand buttons (x > 940). */
+
+const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const p=(t,a,b)=>clamp((t-a)/(b-a));
+const eo=x=>1-Math.pow(1-x,3);
+const eio=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const lerp=(a,b,x)=>a+(b-a)*x;
+const win=(t,a,b,f=.5)=>Math.min(eo(p(t,a,a+f)),1-eo(p(t,b-f,b)));
+const S=document.getElementById("stage");
+const el=(html,style="")=>{const d=document.createElement("div");d.className="abs";d.style.cssText=style;d.innerHTML=html;S.appendChild(d);return d};
+const set=(e,o,tx=0,ty=0,s=1)=>{e.style.opacity=o;e.style.transform=`translate(${tx}px,${ty}px) scale(${s})`;e.style.visibility=o<=0.001?"hidden":"visible"};
+const A="var(--accent)";
+const center="left:0;right:0;text-align:center";
+
+el("","inset:0").className="abs vignette";
+
+/* Beat 1-2: tiles scattered above and below the headline */
+const tileColors=["#5b8def","#f2a65a","#e5677d","#a78bfa","#3ddc97","#f4d35e","#56c2e6","#ef8f6b"];
+const tilePos=[[110,330],[780,300],[440,420],[150,1240],[820,1220],[470,1380],[60,560],[860,600]];
+const tiles=tilePos.map((pos,i)=>{
+  const shape=i%3===0?"width:46px;height:46px;border-radius:50%":i%3===1?"width:52px;height:36px":"width:20px;height:54px";
+  return {e:el(`<div class="tile"><i style="${shape};background:${tileColors[i]}"></i></div>`,`left:${pos[0]}px;top:${pos[1]}px`),x:pos[0],y:pos[1],i};
+});
+const hook=CONFIG.hook.map((w,i)=>el(`<div class="h" style="font-size:112px">${w}</div>`,`left:60px;width:880px;text-align:center;top:${780+i*135}px`));
+const gather=CONFIG.gather.map((w,i)=>el(`<div class="h" style="font-size:118px">${i?`<span style="color:var(--accent)">${w}</span>`:w}</div>`,`left:60px;width:880px;text-align:center;top:${700+i*140}px`));
+
+/* Beat 3: product window, laid out for a tall screen */
+const W=880,H=1080;
+const sideIcons=tileColors.slice(0,6).map(c=>`<div style="width:40px;height:40px;border-radius:12px;background:${c};opacity:.9"></div>`).join("");
+const chartPath="M0,250 C80,240 120,200 200,205 C280,210 320,150 400,140 C480,130 520,170 600,120 C680,70 720,90 800,60 C860,40 900,30 960,20";
+const win3=el(`
+<div class="glass" style="width:${W}px;height:${H}px;position:relative;overflow:hidden">
+  <div class="row" style="position:absolute;left:0;right:0;top:0;height:84px;padding:0 30px;border-bottom:1px solid rgba(255,255,255,.08)">
+    <div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div>
+    <div style="margin-left:22px;font-weight:700;font-size:30px;letter-spacing:-.01em">${CONFIG.product}</div>
+    <div style="margin-left:auto;width:300px;height:48px;border-radius:24px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)"></div>
+  </div>
+  <div style="position:absolute;left:0;top:84px;bottom:0;width:100px;padding:34px 30px;display:flex;flex-direction:column;gap:30px;border-right:1px solid rgba(255,255,255,.06)">${sideIcons}</div>
+  <div style="position:absolute;left:128px;right:28px;top:116px;display:grid;grid-template-columns:repeat(3,1fr);gap:18px">
+    ${["Pipeline","Tasks","Revenue"].map((n,i)=>`<div class="card kpi" style="height:160px"><div class="label">${n}</div>
+      <svg width="170" height="70" viewBox="0 0 300 80" preserveAspectRatio="none" style="margin-top:20px;overflow:visible"><path class="spark" d="${["M0,60 L50,52 L100,58 L150,40 L200,44 L250,22 L300,14","M0,30 L50,40 L100,28 L150,46 L200,36 L250,50 L300,42","M0,70 L50,64 L100,50 L150,54 L200,34 L250,30 L300,8"][i]}" fill="none" stroke="${i===1?"#8b98a5":"var(--accent)"}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg></div>`).join("")}
+  </div>
+  <div class="card" style="position:absolute;left:128px;right:28px;top:300px;height:400px">
+    <div class="label">This week</div>
+    <svg width="670" height="300" viewBox="0 0 960 290" preserveAspectRatio="none" style="margin-top:22px;overflow:visible">
+      ${[60,130,200,270].map(y=>`<line x1="0" x2="960" y1="${y}" y2="${y}" stroke="rgba(255,255,255,.06)" stroke-width="2"/>`).join("")}
+      <path id="area" d="${chartPath} L960,290 L0,290 Z" fill="var(--accent)" opacity="0"/>
+      <path id="line" d="${chartPath}" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div class="card" style="position:absolute;left:128px;right:28px;top:724px;bottom:28px;display:flex;flex-direction:column;gap:24px">
+    <div class="label">Up next</div>
+    ${[0,1,2,3,4].map(i=>`<div class="row task"><div style="width:30px;height:30px;border-radius:9px;border:2px solid ${i<2?"var(--accent)":"rgba(255,255,255,.25)"};background:${i<2?"var(--accent)":"transparent"}"></div><div class="pill" style="width:${[400,310,450,260,360][i]}px"></div></div>`).join("")}
+  </div>
+</div>`,`left:60px;top:270px;transform-origin:center`);
+const kpis=[...win3.querySelectorAll(".kpi")], sparks=[...win3.querySelectorAll(".spark")], tasks=[...win3.querySelectorAll(".task")];
+const line=win3.querySelector("#line"), area=win3.querySelector("#area");
+const lineLen=line.getTotalLength(); line.style.strokeDasharray=lineLen;
+sparks.forEach(s=>{s._len=s.getTotalLength();s.style.strokeDasharray=s._len});
+const seeCap=el(`<div class="cap">${CONFIG.seeCap.map((w,i)=>`<span class="w" style="display:inline-block;margin:0 8px">${i===1?`<em>${w}</em>`:w}</span>`).join("")}</div>`,`left:60px;width:880px;top:1410px`);
+const seeWords=[...seeCap.querySelectorAll(".w")];
+
+/* Beat 4: command box */
+const cmd=el(`
+<div class="glass" style="width:880px;padding:30px 30px">
+  <div class="row" style="min-height:120px;padding:20px 26px;border-radius:22px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);align-items:flex-start">
+    <div style="width:30px;height:30px;border-radius:50%;border:4px solid var(--accent);flex:none;margin-top:10px"></div>
+    <div style="font-size:38px;font-weight:500;line-height:1.3;white-space:normal"><span id="typed"></span><span id="caret" style="display:inline-block;width:4px;height:44px;background:var(--ink);vertical-align:-8px;margin-left:4px"></span></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:18px;margin-top:26px">
+    ${CONFIG.results.map((r,i)=>`<div class="row res" style="padding:26px 28px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)"><div class="dot" style="background:${[A,"#f4d35e","#56c2e6"][i]}"></div><div style="font-size:36px;font-weight:500">${r}</div></div>`).join("")}
+  </div>
+</div>`,`left:60px;top:470px`);
+const typed=cmd.querySelector("#typed"), caret=cmd.querySelector("#caret"), results=[...cmd.querySelectorAll(".res")];
+const askCap=el(`<div class="cap">${CONFIG.askCap[0]} <em>${CONFIG.askCap[1]}</em></div>`,`left:60px;width:880px;top:1290px`);
+
+/* Beat 5: checks */
+const checkSvg=`<svg width="30" height="30" viewBox="0 0 24 24"><path class="tick" d="M4 12.5 L10 18 L20 6" fill="none" stroke="var(--accent)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const checks=el(`<div style="display:flex;justify-content:center"><div style="display:flex;flex-direction:column;gap:46px;margin-right:80px">${CONFIG.checks.map(c=>`<div class="row chk" style="gap:28px"><div class="check">${checkSvg}</div><div style="font-size:58px;font-weight:600;letter-spacing:-.02em">${c}</div></div>`).join("")}</div></div>`,"left:0;right:0;top:640px");
+const chkRows=[...checks.querySelectorAll(".chk")], ticks=[...checks.querySelectorAll(".tick")];
+ticks.forEach(k=>{k._len=k.getTotalLength();k.style.strokeDasharray=k._len});
+const checkCap=el(`<div class="cap" style="font-size:96px">${CONFIG.checkCap[0]} <em>${CONFIG.checkCap[1]}</em></div>`,`left:60px;width:880px;top:1180px`);
+
+/* Beat 6: steps, stacked vertically */
+const stepsHead=el(`<div class="h" style="font-size:52px;color:var(--muted);font-weight:600">How it works</div>`,`left:60px;width:880px;text-align:center;top:330px`);
+const stepY=[520,860,1200];
+const track=el(`<svg width="8" height="680"><line id="trk" x1="4" y1="0" x2="4" y2="680" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/></svg>`,"left:186px;top:580px");
+const trk=track.querySelector("#trk"); trk.style.strokeDasharray=680;
+const steps=CONFIG.steps.map((s,i)=>el(`<div class="row" style="gap:44px"><div class="node">${i+1}</div><div style="display:flex;flex-direction:column;gap:10px"><div class="h" style="font-size:72px">${s[0]}</div><div style="font-size:36px;color:var(--muted);font-weight:500">${s[1]}</div></div></div>`,`left:130px;top:${stepY[i]}px`));
+const nodes=steps.map(s=>s.querySelector(".node"));
+
+/* Beat 7: punch, four big lines */
+const punch=CONFIG.punch.map((w,i)=>el(`<div class="h" style="font-size:150px"><span>${w}</span></div>`,`left:60px;width:880px;text-align:center;top:${[540,700,950,1110][i]}px`));
+const underline=el(`<div style="height:14px;border-radius:7px;background:var(--accent);transform-origin:left"></div>`,"left:0;top:1285px;width:0");
+
+/* Beat 8: end card */
+const logo=el(`<div style="width:170px;height:170px;border-radius:46px;background:var(--accent);display:grid;place-items:center"><div style="width:70px;height:70px;border-radius:50%;border:14px solid var(--bg)"></div></div>`,"left:415px;top:560px");
+const name=el(`<div class="h" style="font-size:130px">${CONFIG.product}</div>`,`left:60px;width:880px;text-align:center;top:790px`);
+const tag=el(`<div style="font-size:46px;color:var(--muted);font-weight:500">${CONFIG.tagline}</div>`,`left:60px;width:880px;text-align:center;top:960px`);
+const cta=el(`<div style="display:inline-block;padding:34px 56px;border-radius:999px;background:var(--ink);color:var(--bg);font-size:44px;font-weight:700;letter-spacing:-.01em">${CONFIG.cta}</div>`,`left:60px;width:880px;text-align:center;top:1090px`);
+
+if(new URLSearchParams(location.search).has("guides")) el("","").className="abs guide";
+
+function render(t){
+  t=((t%DURATION)+DURATION)%DURATION;
+  const conv=eio(p(t,5,8.5));
+  tiles.forEach(o=>{
+    const dx=Math.sin(t*.6+o.i)*14, dy=Math.cos(t*.5+o.i*1.7)*14;
+    const intro=eo(p(t,o.i*.06,.5+o.i*.06));
+    const dockX=500+(o.i-3.5)*104-60, dockY=1070;
+    set(o.e,Math.max(intro,t<0.05?1:0)*(1-p(t,8.4,9.0)),lerp(dx,dockX-o.x,conv),lerp(dy,dockY-o.y,conv),lerp(1,.78,conv));
+  });
+  // hook is on screen from frame 1 (first frame of a reel must not be empty)
+  hook.forEach((e,i)=>{const a=i*.5;set(e,i===0?1-eo(p(t,4.6,5.2)):win(t,a,5.2,.5),0,i===0?0:(1-eo(p(t,a,a+.6)))*40)});
+  gather.forEach((e,i)=>{const a=5.2+i*1.1;set(e,win(t,a,9.2,.5),0,(1-eo(p(t,a,a+.7)))*40)});
+
+  const wIn=eo(p(t,9.2,10.4)), wOut=eo(p(t,19.4,20.4));
+  const push=lerp(1,1.05,eio(p(t,10,19.5)));
+  set(win3,wIn*(1-wOut*.85),0,lerp(60,0,wIn)+wOut*-30,lerp(.9,push,wIn)*(1-wOut*.06));
+  win3.style.filter=wOut>0?`blur(${wOut*8}px)`:"none";
+  if(t>21) win3.style.opacity=lerp(.15,0,eo(p(t,29.5,30.3)));
+  kpis.forEach((k,i)=>{const a=10.4+i*.3;set(k,eo(p(t,a,a+.6)),0,(1-eo(p(t,a,a+.6)))*20)});
+  sparks.forEach((s,i)=>{s.style.strokeDashoffset=s._len*(1-eio(p(t,11+i*.3,12.6+i*.3)))});
+  line.style.strokeDashoffset=lineLen*(1-eio(p(t,12,15.5)));
+  area.setAttribute("opacity",.14*eo(p(t,14.5,16)));
+  tasks.forEach((k,i)=>{const a=14.6+i*.35;set(k,eo(p(t,a,a+.5)),(1-eo(p(t,a,a+.5)))*24,0)});
+  seeWords.forEach((w,i)=>{const a=11+i*.6;set(w,win(t,a,19.6,.5),0,(1-eo(p(t,a,a+.5)))*24)});
+
+  set(cmd,win(t,20.4,29.8,.6),0,(1-eo(p(t,20.4,21.2)))*40);
+  typed.textContent=CONFIG.prompt.slice(0,Math.floor(CONFIG.prompt.length*p(t,21.2,25.2)));
+  caret.style.opacity=(t<25.8)?((Math.floor(t*2.2)%2===0||(t>21.2&&t<25.2))?1:0):0;
+  results.forEach((r,i)=>{const a=26+i*.45;set(r,eo(p(t,a,a+.5)),0,(1-eo(p(t,a,a+.5)))*24)});
+  set(askCap,win(t,21,29.6,.5),0,(1-eo(p(t,21,21.5)))*24);
+
+  chkRows.forEach((r,i)=>{const a=30.2+i*1.2;set(r,win(t,a,35.8,.5),(1-eo(p(t,a,a+.6)))*40,0)});
+  ticks.forEach((k,i)=>{const a=30.7+i*1.2;k.style.strokeDashoffset=k._len*(1-eo(p(t,a,a+.5)))});
+  set(checkCap,win(t,33.6,35.8,.5),0,(1-eo(p(t,33.6,34.1)))*24);
+
+  set(stepsHead,win(t,36,45.8,.5),0,(1-eo(p(t,36,36.6)))*20);
+  set(track,win(t,36.4,45.8,.4));
+  trk.style.strokeDashoffset=680*(1-eio(p(t,38,43.2)));
+  steps.forEach((s,i)=>{const a=36.8+i*2.6;set(s,win(t,a,45.8,.6),(1-eo(p(t,a,a+.7)))*40,0)});
+  nodes.forEach((nd,i)=>{const on=p(t,37.2+i*2.6,37.7+i*2.6);nd.style.borderColor=on>0?"var(--accent)":"rgba(255,255,255,.12)";nd.style.color=on>0?"var(--accent)":"var(--ink)"});
+
+  punch.forEach((e,i)=>{const a=46+i*.8;set(e,win(t,a,51.8,.45),0,(1-eo(p(t,a,a+.5)))*40)});
+  const sp=punch[3].querySelector("span"), sc=S.getBoundingClientRect().width/1080;
+  underline.style.left=((sp.getBoundingClientRect().left-S.getBoundingClientRect().left)/sc)+"px";
+  underline.style.width=(sp.getBoundingClientRect().width/sc)+"px";
+  underline.style.transform=`scaleX(${eio(p(t,49,50))})`; underline.style.opacity=win(t,48.9,51.8,.4);
+
+  set(logo,eo(p(t,52.1,52.9)),0,(1-eo(p(t,52.1,52.9)))*30,lerp(.85,1,eo(p(t,52.1,52.9))));
+  set(name,eo(p(t,52.6,53.4)),0,(1-eo(p(t,52.6,53.4)))*30);
+  set(tag,eo(p(t,53.2,54)),0,(1-eo(p(t,53.2,54)))*24);
+  set(cta,eo(p(t,53.9,54.7)),0,(1-eo(p(t,53.9,54.7)))*24);
+}
+window.seek=s=>{render(s);return s};
+const rendering=new URLSearchParams(location.search).has("render");
+function fit(){const s=rendering?1:Math.min(innerWidth/1080,innerHeight/1920);S.style.transform=`scale(${s})`}
+addEventListener("resize",fit); fit();
+if(!rendering){const t0=performance.now();(function loop(){render((performance.now()-t0)/1000);requestAnimationFrame(loop)})()}
+else render(0);
+</script>
+</body>
+</html>

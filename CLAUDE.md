@@ -29,3 +29,20 @@ animating anything:
 `.claude/skills/` includes MIT-licensed skills by Charlie Hills
 (github.com/charlie947: motion-graphics-skills, social-media-skills,
 voiceprint). Their licence is kept as `LICENSE.charlie-hills` in each folder.
+
+## Video projects
+
+Every video lives in `clients/<client>/projects/<video-name>/`, copied from
+`clients/_template/projects/_video/` (see its README for what goes where).
+For every motion graphics video:
+
+1. Read the research, the script, then the reference videos.
+2. Write `reference-breakdown.md` (what makes each reference hold attention).
+3. Write `beat-sheet.md` and wait for approval before building.
+4. Build in code with `window.seek()`; for Reels keep words inside
+   x 60 to 940, y 250 to 1500 at 1080 x 1920, and show the hook on frame 1.
+5. Check one still per beat, then render with `tools/render-video.js`.
+6. Always finish with `BREAKDOWN.md`: the idea, retention logic beat by beat,
+   techniques, format choices, how to reuse it, and what to improve.
+
+Never invent a number, testimonial or result; use only what the inputs supply.
